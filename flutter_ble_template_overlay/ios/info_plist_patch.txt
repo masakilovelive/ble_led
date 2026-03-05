@@ -1,0 +1,5 @@
+
+Info.plist に以下のキーを追加してください:
+
+<key>NSBluetoothAlwaysUsageDescription</key>
+<string>BLEデバイスと通信するためにBluetoothを使用します。</string>

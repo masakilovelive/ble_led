@@ -1,0 +1,10 @@
+
+AndroidManifest.xml に以下の権限を追加してください（application タグ外でOK）:
+
+<!-- Android 12+ 近接デバイス権限 -->
+<uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+<!-- Android 11 以下でスキャンに位置権限が必要なケース -->
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+<uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />

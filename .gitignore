@@ -1,0 +1,56 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+/.venv/
+/venv/
+/Lib/
+/Scripts/
+/.math_cache/
+
+# Logs / temp
+*.log
+/logs/
+tmp/
+temp/
+
+# Flutter / Dart
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub/
+**/.packages
+**/build/
+**/coverage/
+**/android/local.properties
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+*.apk
+*.aab
+
+# Misc generated
+*.class
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# Keep Flutter wrapper scripts in tracked app templates
+!ble_led_app/android/gradlew
+!ble_led_app/android/gradlew.bat
+!ble_led_app/android/gradle/wrapper/gradle-wrapper.jar
+!flutter_ble_template_overlay/android/gradlew
+!flutter_ble_template_overlay/android/gradlew.bat
+!flutter_ble_template_overlay/android/gradle/wrapper/gradle-wrapper.jar
