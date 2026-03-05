@@ -14,6 +14,8 @@ VOLTAGE_CHR_UUID = "de8a5aac-a99b-c315-0c80-60d4cbb51003"
 WRITE_RESPONSE  = True              # True: Write Request, False: Write Command
 SCAN_TIMEOUT    = 8.0               # [s]
 CONNECT_TIMEOUT = 15.0              # [s]
+WINRT_ADDRESS_TYPE = "public"      # Windows C3 devices are stable with public address type
+WINRT_USE_CACHED_SERVICES = None    # None=library default, True/False to force
 
 # 必要なら任意の書き込みキャラクタリスティックを上書き
 # WRITE_CHAR_UUID = CHR_UUID

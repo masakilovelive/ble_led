@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
@@ -30,8 +30,8 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _connectionSub = ref.listenManual<ConnectionStateModel>(connectionProvider,
-        (prev, next) {
+    _connectionSub =
+        ref.listenManual<ConnectionStateModel>(connectionProvider, (prev, next) {
       final wasConnected = prev?.status == DeviceConnectionState.connected;
       final isConnected = next.status == DeviceConnectionState.connected;
       if (!wasConnected && isConnected) {
@@ -41,7 +41,9 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
           setState(() {});
         }
         _sendCommand(
-          () => ref.read(ledControllerProvider).applyIdleState(widget.deviceId),
+          () => ref
+              .read(ledControllerProvider)
+              .applyIdleState(widget.deviceId),
         );
       } else if (wasConnected && !isConnected) {
         if (mounted) {
@@ -193,10 +195,8 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double circleSize = math
-            .min(constraints.maxWidth, 260.0)
-            .clamp(160.0, 260.0)
-            .toDouble();
+        final double circleSize =
+            math.min(constraints.maxWidth, 260.0).clamp(160.0, 260.0).toDouble();
 
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -221,8 +221,7 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
                     : null,
                 onChangeEnd: connected
                     ? (value) => _sendCommand(() async {
-                          await led.setBrightness(
-                              widget.deviceId, value.round());
+                          await led.setBrightness(widget.deviceId, value.round());
                         })
                     : null,
               ),
@@ -287,8 +286,7 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double gattHeight =
-            (constraints.maxHeight * 0.35).clamp(140.0, 260.0).toDouble();
+        final double gattHeight = (constraints.maxHeight * 0.35).clamp(140.0, 260.0).toDouble();
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -306,7 +304,8 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
                       divisions: 38,
                       label: '${_rainbowInterval.round()} ms',
                       onChanged: connected
-                          ? (value) => setState(() => _rainbowInterval = value)
+                          ? (value) =>
+                              setState(() => _rainbowInterval = value)
                           : null,
                     ),
                   ),
@@ -514,3 +513,11 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
     );
   }
 }
+
+
+
+
+
+
+
+

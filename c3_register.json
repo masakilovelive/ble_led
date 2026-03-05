@@ -1,0 +1,20 @@
+[
+  {
+    "n_value": 1,
+    "a_name": "XIAO-ESP32C3-LED-STOCK1",
+    "a_port": "COM9",
+    "a_mac": "24:EC:4A:CA:6E:EA",
+    "b_name": "XIAO-ESP32C3-LED-STOCK2",
+    "b_port": "COM8",
+    "b_mac": "B0:81:84:04:5D:9E"
+  },
+  {
+    "n_value": 2,
+    "a_name": "XIAO-ESP32C3-LED-STOCK3",
+    "a_port": "COM10",
+    "a_mac": "58:8C:81:AC:32:D6",
+    "b_name": "XIAO-ESP32C3-LED-STOCK4",
+    "b_port": "COM11",
+    "b_mac": "58:8C:81:AC:68:02"
+  }
+]

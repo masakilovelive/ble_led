@@ -2,7 +2,6 @@
 #include <Wire.h>
 #include <LSM6DS3.h>
 #include <math.h>
-#include "firmware_versions.h"
 extern "C" {
   #include "em_gpio.h"
   #include "em_cmu.h"
@@ -24,7 +23,6 @@ static constexpr uint8_t CMD_START_RAINBOW = 0x03;
 static constexpr uint8_t CMD_STOP_RAINBOW = 0x04;
 static constexpr uint8_t CMD_ACCEL_MODE = 0x06;
 
-static const char *FIRMWARE_NAME = "xiao_mg24_ble_d9_front";
 static const char *DEVICE_NAME = "XIAO-MG24-LED";
 static const uint8_t GENERIC_ACCESS_UUID_16[2] = { 0x00, 0x18 };
 static const uint8_t IMMEDIATE_ALERT_UUID_16[2] = { 0x02, 0x18 };
@@ -584,18 +582,10 @@ static void start_normal_advertising() {
   sl_bt_legacy_advertiser_start(adv_handle, sl_bt_legacy_advertiser_connectable);
 }
 
-static void print_version() {
-  Serial.print(F("Firmware: "));
-  Serial.print(FIRMWARE_NAME);
-  Serial.print(F(" v"));
-  Serial.println(FW_VERSION_D9_FRONT);
-}
-
 // -------------------- Arduino lifecycle --------------------
 void setup() {
   Serial.begin(115200);
   delay(100);
-  print_version();
 
   CMU_ClockEnable(cmuClock_GPIO, true);
   GPIO_PinModeSet(FRONT_PORT, FRONT_PORT_PIN, gpioModePushPull, 0);
@@ -674,6 +664,7 @@ extern "C" void sl_bt_on_event(sl_bt_msg_t *evt) {
       break;
   }
 }
+
 
 
 

@@ -6,6 +6,8 @@ from bleak import BleakClient, BleakScanner
 
 import config
 
+BATTERY_DIVIDER_RATIO = 2.01
+
 
 def parse_voltage_payload(data: bytes) -> Tuple[int, int]:
     if len(data) < 4:
@@ -27,8 +29,9 @@ async def resolve_address() -> str:
 
 
 def format_voltage(raw: int, mv: int) -> str:
-    volts = mv / 1000.0
-    return f"{volts:.3f} V ({mv} mV, raw={raw})"
+    pin_volts = mv / 1000.0
+    battery_volts = pin_volts * BATTERY_DIVIDER_RATIO
+    return f"{battery_volts:.3f} V ({mv} mV pin, raw={raw})"
 
 
 async def read_once(client: BleakClient) -> Tuple[int, int]:

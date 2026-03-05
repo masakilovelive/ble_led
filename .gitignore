@@ -21,7 +21,9 @@ htmlcov/
 
 # Logs / temp
 *.log
+*.err
 /logs/
+/dist/
 tmp/
 temp/
 
@@ -39,6 +41,9 @@ temp/
 **/android/app/release/
 *.apk
 *.aab
+
+# Local artifacts
+/dist/
 
 # Misc generated
 *.class

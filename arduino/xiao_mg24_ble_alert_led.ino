@@ -1,7 +1,6 @@
 ﻿#include <Arduino.h>
 #include <Wire.h>
 #include <LSM6DS3.h>
-#include "firmware_versions.h"
 extern "C" {
   #include "em_gpio.h"
   #include "em_cmu.h"
@@ -24,7 +23,6 @@ static constexpr uint8_t CMD_SET_FRONT_COLOR = 0x07;
 static constexpr uint8_t CMD_SET_REAR_COLOR  = 0x08;
 static constexpr uint8_t CMD_SET_OUTPUT_ENABLE = 0x09;
 
-static const char *FIRMWARE_NAME = "xiao_mg24_ble_alert_led";
 static const char *DEVICE_NAME = "XIAO-MG24-LED";
 static const uint8_t GENERIC_ACCESS_UUID_16[2] = { 0x00, 0x18 };
 static const uint8_t IMMEDIATE_ALERT_UUID_16[2] = { 0x02, 0x18 };
@@ -446,14 +444,7 @@ static void handle_led_command(const uint8_t *data, uint16_t len) {
 
 // -------------------- Serial (debug) --------------------
 static void print_help() {
-  Serial.println(F("Commands: HELP, VER, ON, OFF, BR xx, COLOR r g b, FRONT r g b, REAR r g b, ACCEL 0|1"));
-}
-
-static void print_version() {
-  Serial.print(F("Firmware: "));
-  Serial.print(FIRMWARE_NAME);
-  Serial.print(F(" v"));
-  Serial.println(FW_VERSION_ALERT_LED);
+  Serial.println(F("Commands: HELP, ON, OFF, BR xx, COLOR r g b, FRONT r g b, REAR r g b, ACCEL 0|1"));
 }
 
 static void handle_serial() {
@@ -463,8 +454,6 @@ static void handle_serial() {
   line.toUpperCase();
   if (line == "HELP") {
     print_help();
-  } else if (line == "VER" || line == "VERSION") {
-    print_version();
   } else if (line == "ON") {
     set_led_enabled(true);
   } else if (line == "OFF") {
@@ -607,7 +596,6 @@ static void start_normal_advertising() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  print_version();
   print_help();
 
   CMU_ClockEnable(cmuClock_GPIO, true);
