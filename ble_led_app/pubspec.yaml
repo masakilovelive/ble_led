@@ -1,7 +1,7 @@
 name: ble_led_app
 description: Flutter BLE Alert Level demo (0x2A06)
 publish_to: "none"
-version: 0.1.1+2
+version: 0.1.2+3
 environment:
   sdk: ">=3.2.0 <4.0.0"
 
