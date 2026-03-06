@@ -1,0 +1,90 @@
+---
+id: c2816fb9-ec4c-49ad-b2f7-83cec0f1f989
+---
+sequenceDiagram
+    autonumber
+    actor User as Operator
+    participant GUI as PC GUI<br/>(gui_c3_state_check_dual.py)
+    participant App as Android App<br/>(BleLedApp)
+    participant UNO as UNO Endurance MCU<br/>(uno_endurance_mcu_auto.ino)
+    participant BLE as BLE Stack<br/>(Bleak / flutter_reactive_ble)
+    participant A as Stock A FW<br/>(xiao_esp32c3_stock2.ino)
+    participant B as Stock B FW<br/>(xiao_esp32c3_stock2.ino)
+    participant LED as NeoPixel
+    participant ADC as Battery ADC
+    participant CSV as Endurance CSV
+
+    Note over App,A: Normal BLE control flow (single stock)
+    A->>LED: setup: init strips and clear
+    A->>A: NimBLE init + service/characteristics + advertising start
+    App->>BLE: scanForDevices(service UUID)
+    BLE-->>App: discovered DEVICE_NAME
+    App->>BLE: connect(deviceId)
+    BLE->>A: connect request
+    A-->>BLE: connected (or auth reject if strict security)
+    BLE-->>App: connected
+    App->>BLE: CMD_SET_OUTPUT_ENABLE / COLOR / RAINBOW / HEARTBEAT / PATTERN
+    BLE->>A: write kCommandUuid
+    A->>LED: apply solid or selected mode
+    loop every ~10 ms
+        A->>A: update pattern/heartbeat/rainbow/accel
+        A->>LED: render frame
+    end
+    opt battery read
+        App->>BLE: read kVoltageUuid
+        BLE->>A: onRead(voltage)
+        A->>ADC: analogRead + analogReadMilliVolts
+        ADC-->>A: raw + mV
+        A-->>BLE: 4-byte payload
+        BLE-->>App: battery payload
+    end
+    App->>BLE: disconnect
+    BLE->>A: onDisconnect
+    A->>LED: output off and clear
+    A->>A: restart advertising
+
+    Note over User,CSV: Endurance flow (dual stock + power automation)
+    User->>GUI: Start Endurance (cycles, waits, options)
+    GUI->>GUI: Validate register baseline and reset counters
+    opt MCU power automation enabled
+        User->>UNO: run <cycles> <connect_wait_ms> <disconnect_wait_ms>
+        UNO-->>GUI: [STATE] ENDURANCE_START / CYCLE_START
+    end
+
+    loop Cycle 1..N
+        GUI->>BLE: Scan selected A/B devices
+        BLE-->>GUI: scan result map
+
+        par UNO power sequence
+            UNO->>A: power OFF -> ON (A first)
+            UNO->>B: power ON (after A->B delay)
+            UNO-->>GUI: [STATE] SENSOR_ON_OK or SENSOR_ON_NG
+        and GUI BLE test sequence
+            GUI->>BLE: connectBoth()
+            BLE->>A: connect + service discover
+            BLE->>B: connect + service discover
+            GUI->>A: startup wave + output commands
+            GUI->>B: startup wave + output commands
+            opt run_gatt_check
+                GUI->>A: battery read / GATT check
+                GUI->>B: battery read / GATT check
+            end
+            GUI->>BLE: disconnectBoth()
+        end
+
+        UNO->>A: power OFF
+        UNO->>B: power OFF
+        UNO-->>GUI: [STATE] SENSOR_OFF_OK or SENSOR_OFF_NG
+        GUI->>GUI: classify PASS/FAIL and failure_class
+        GUI->>GUI: update progress and counters
+        alt FAIL and stop_on_fail
+            GUI->>GUI: stop loop
+            UNO->>UNO: stop
+        else continue
+            GUI->>GUI: next cycle
+        end
+    end
+
+    GUI->>CSV: export endurance_report_*.csv
+    GUI->>CSV: export endurance_report_summary_*.csv
+    GUI-->>User: show report path and final summary
