@@ -47,5 +47,7 @@
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 <string>BLEデバイスと通信するためにBluetoothを使用します。</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>BLEデバイスと通信するためにBluetoothを使用します。</string>
 </dict>
 </plist>

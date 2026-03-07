@@ -51,8 +51,10 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
   @override
   void initState() {
     super.initState();
-    _stockSubscription =
-        ref.listenManual<StockState>(stockProvider, (prev, next) {
+    _stockSubscription = ref.listenManual<StockState>(stockProvider, (
+      prev,
+      next,
+    ) {
       final isBothConnected = _bothConnected(next);
 
       if (!isBothConnected) {
@@ -75,7 +77,8 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
       }
     });
     Future<void>.microtask(
-        () => ref.read(stockProvider.notifier).ensureLoaded());
+      () => ref.read(stockProvider.notifier).ensureLoaded(),
+    );
   }
 
   @override
@@ -104,9 +107,7 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
             tooltip: 'Bluetooth Setup',
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const SetupScreen(),
-                ),
+                MaterialPageRoute<void>(builder: (_) => const SetupScreen()),
               );
             },
             icon: const Icon(Icons.bluetooth_searching),
@@ -141,10 +142,7 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
     _loadPickerFromUi(ref.read(ledUiProvider));
   }
 
-  Widget _buildColorBody(
-    StockState stockState,
-    LedUiState ledUiState,
-  ) {
+  Widget _buildColorBody(StockState stockState, LedUiState ledUiState) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 980;
@@ -180,9 +178,7 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: _buildCenterPickerCard(ledUiState),
-                        ),
+                        Expanded(child: _buildCenterPickerCard(ledUiState)),
                         const SizedBox(width: 14),
                         SizedBox(
                           width: 320,
@@ -236,10 +232,7 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text('SYNCRO'),
-                    Switch(
-                      value: _syncro,
-                      onChanged: _setSyncro,
-                    ),
+                    Switch(value: _syncro, onChanged: _setSyncro),
                   ],
                 ),
               ],
@@ -290,7 +283,8 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
             ),
             const SizedBox(height: 10),
             FilledButton(
-              onPressed: sideState.device != null &&
+              onPressed:
+                  sideState.device != null &&
                       sideState.status != DeviceConnectionState.connected
                   ? () => ref.read(stockProvider.notifier).connect(side)
                   : null,
@@ -306,8 +300,9 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
 
   Widget _buildCenterPickerCard(LedUiState ledUiState) {
     final color = _currentPickerColor();
-    final textColor =
-        color.computeLuminance() > 0.45 ? Colors.black : Colors.white;
+    final textColor = color.computeLuminance() > 0.45
+        ? Colors.black
+        : Colors.white;
     return Card(
       color: const Color(0xFFD5D7DA),
       child: Padding(
@@ -317,9 +312,9 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
             Text(
               'COLOR SELECT',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w900,
-                  ),
+                color: Colors.black,
+                fontWeight: FontWeight.w900,
+              ),
             ),
             const SizedBox(height: 12),
             Row(
@@ -434,9 +429,9 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
             Text(
               side == StockSide.a ? 'stockA' : 'stockB',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w700,
-                  ),
+                color: Colors.black,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
             _FigureTapTarget(
@@ -457,9 +452,7 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
               margin: const EdgeInsets.symmetric(vertical: 10),
               color: Colors.white,
             ),
-            _BatteryRect(
-              percent: sideUi.batteryPercent,
-            ),
+            _BatteryRect(percent: sideUi.batteryPercent),
             Container(
               width: 96,
               height: 18,
@@ -474,8 +467,10 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
                   : () => _selectSideAndZone(side, ColorZone.bottom),
               child: _StockSegmentCircle(
                 mode: sideUi.bottom.mode,
-                color:
-                    _segmentDisplayColor(sideUi.bottom, sideUi.heartbeatColor),
+                color: _segmentDisplayColor(
+                  sideUi.bottom,
+                  sideUi.heartbeatColor,
+                ),
                 rainbowAngle: rainbowAngle,
               ),
             ),
@@ -487,16 +482,23 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
 
   Widget _buildMotionCard(StockState stockState, LedUiState ledUiState) {
     final currentColor = _currentPickerColor();
-    final textColor =
-        currentColor.computeLuminance() > 0.45 ? Colors.black : Colors.white;
-    final heartbeatEnabled =
-        _isModeActive(stockState, ledUiState, LedMode.heartbeat);
-    final rainbowEnabled =
-        _isModeActive(stockState, ledUiState, LedMode.rainbow);
+    final textColor = currentColor.computeLuminance() > 0.45
+        ? Colors.black
+        : Colors.white;
+    final heartbeatEnabled = _isModeActive(
+      stockState,
+      ledUiState,
+      LedMode.heartbeat,
+    );
+    final rainbowEnabled = _isModeActive(
+      stockState,
+      ledUiState,
+      LedMode.rainbow,
+    );
     final heartbeatPreset =
         _heartbeatPresets.contains(_selectedHeartbeatPresetMs)
-            ? _selectedHeartbeatPresetMs
-            : _heartbeatPresets[1];
+        ? _selectedHeartbeatPresetMs
+        : _heartbeatPresets[1];
     return Card(
       color: Colors.white10,
       child: Padding(
@@ -656,8 +658,9 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
   }
 
   void _loadPickerFromUi(LedUiState state) {
-    final sideState =
-        _syncro ? state.sideState(StockSide.a) : state.sideState(_selectedSide);
+    final sideState = _syncro
+        ? state.sideState(StockSide.a)
+        : state.sideState(_selectedSide);
     final color = switch (_selectedZone) {
       ColorZone.top => sideState.top.color,
       ColorZone.bottom => sideState.bottom.color,
@@ -686,38 +689,58 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
     final uiNotifier = ref.read(ledUiProvider.notifier);
     final heartbeat = ref.read(heartbeatControllerProvider);
     final color = _currentPickerColor();
-    for (final side in _targetSides(stockState, connectedOnly: true)) {
+    for (final side in _targetSides(stockState)) {
       final deviceId = _deviceId(stockState, side);
       if (deviceId == null) {
         continue;
       }
-      heartbeat.stop(side,
-          deviceId: deviceId, sendOff: false, resetMode: false);
-      try {
-        await led.stopRainbow(deviceId);
-      } catch (_) {}
+
       final currentSide = ui.sideState(side);
       final nextTopMode =
           _selectedZone == ColorZone.top || _selectedZone == ColorZone.both
-              ? LedMode.color
-              : (currentSide.top.mode == LedMode.color
-                  ? LedMode.color
-                  : LedMode.off);
+          ? LedMode.color
+          : (currentSide.top.mode == LedMode.color
+                ? LedMode.color
+                : LedMode.off);
       final nextBottomMode =
           _selectedZone == ColorZone.bottom || _selectedZone == ColorZone.both
-              ? LedMode.color
-              : (currentSide.bottom.mode == LedMode.color
-                  ? LedMode.color
-                  : LedMode.off);
+          ? LedMode.color
+          : (currentSide.bottom.mode == LedMode.color
+                ? LedMode.color
+                : LedMode.off);
       final nextTopColor =
           _selectedZone == ColorZone.top || _selectedZone == ColorZone.both
-              ? color
-              : currentSide.top.color;
+          ? color
+          : currentSide.top.color;
       final nextBottomColor =
           _selectedZone == ColorZone.bottom || _selectedZone == ColorZone.both
-              ? color
-              : currentSide.bottom.color;
+          ? color
+          : currentSide.bottom.color;
 
+      uiNotifier.setOutputEnabled(side, true);
+      uiNotifier.setBrightness(side, _brightness);
+      uiNotifier.setSegmentMode(side, ColorZone.top, nextTopMode);
+      uiNotifier.setSegmentMode(side, ColorZone.bottom, nextBottomMode);
+      if (_selectedZone == ColorZone.both) {
+        uiNotifier.setSegmentColor(side, ColorZone.both, color);
+      } else {
+        uiNotifier.setSegmentColor(side, _selectedZone, color);
+      }
+
+      final sideState = side == StockSide.a ? stockState.a : stockState.b;
+      if (sideState.status != DeviceConnectionState.connected) {
+        continue;
+      }
+
+      heartbeat.stop(
+        side,
+        deviceId: deviceId,
+        sendOff: false,
+        resetMode: false,
+      );
+      try {
+        await led.stopRainbow(deviceId);
+      } catch (_) {}
       await led.setOutputEnabled(deviceId, true);
       await led.setBrightness(deviceId, _brightness.round());
       await led.setTopColor(
@@ -730,16 +753,6 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
         side: side,
         color: nextBottomMode == LedMode.off ? Colors.black : nextBottomColor,
       );
-
-      uiNotifier.setOutputEnabled(side, true);
-      uiNotifier.setBrightness(side, _brightness);
-      uiNotifier.setSegmentMode(side, ColorZone.top, nextTopMode);
-      uiNotifier.setSegmentMode(side, ColorZone.bottom, nextBottomMode);
-      if (_selectedZone == ColorZone.both) {
-        uiNotifier.setSegmentColor(side, ColorZone.both, color);
-      } else {
-        uiNotifier.setSegmentColor(side, _selectedZone, color);
-      }
     }
   }
 
@@ -801,8 +814,12 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
       if (deviceId == null) {
         continue;
       }
-      heartbeat.stop(side,
-          deviceId: deviceId, sendOff: false, resetMode: false);
+      heartbeat.stop(
+        side,
+        deviceId: deviceId,
+        sendOff: false,
+        resetMode: false,
+      );
       await led.setOutputEnabled(deviceId, true);
       await led.setBrightness(deviceId, _brightness.round());
       await led.startRainbow(deviceId, intervalMs: 40);
@@ -823,9 +840,15 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
       }
       await led.stopRainbow(deviceId);
       await led.setTopColor(
-          deviceId: deviceId, side: side, color: Colors.black);
+        deviceId: deviceId,
+        side: side,
+        color: Colors.black,
+      );
       await led.setBottomColor(
-          deviceId: deviceId, side: side, color: Colors.black);
+        deviceId: deviceId,
+        side: side,
+        color: Colors.black,
+      );
       uiNotifier.setSegmentMode(side, ColorZone.both, LedMode.off);
     }
   }
@@ -861,8 +884,10 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
     final ui = ref.read(ledUiProvider);
     final uiNotifier = ref.read(ledUiProvider.notifier);
     final heartbeat = ref.read(heartbeatControllerProvider);
-    final stepMs =
-        (_startupCycleMs / _startupColors.length).round().clamp(60, 5000);
+    final stepMs = (_startupCycleMs / _startupColors.length).round().clamp(
+      60,
+      5000,
+    );
 
     _startupWaveRunning = true;
     try {
@@ -891,21 +916,31 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
           resetMode: false,
         );
       }
-      await Future.wait(targets.map((target) async {
-        try {
-          await led.stopRainbow(target.deviceId);
-        } catch (_) {}
-        await led.setOutputEnabled(target.deviceId, true);
-        await led.setBrightness(target.deviceId, target.brightness);
-      }));
+      await Future.wait(
+        targets.map((target) async {
+          try {
+            await led.stopRainbow(target.deviceId);
+          } catch (_) {}
+          await led.setOutputEnabled(target.deviceId, true);
+          await led.setBrightness(target.deviceId, target.brightness);
+        }),
+      );
 
       for (final color in _startupColors) {
-        await Future.wait(targets.map((target) async {
-          await led.setTopColor(
-              deviceId: target.deviceId, side: target.side, color: color);
-          await led.setBottomColor(
-              deviceId: target.deviceId, side: target.side, color: color);
-        }));
+        await Future.wait(
+          targets.map((target) async {
+            await led.setTopColor(
+              deviceId: target.deviceId,
+              side: target.side,
+              color: color,
+            );
+            await led.setBottomColor(
+              deviceId: target.deviceId,
+              side: target.side,
+              color: color,
+            );
+          }),
+        );
         await Future<void>.delayed(Duration(milliseconds: stepMs));
       }
 
@@ -933,12 +968,10 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
     }).toList();
   }
 
-  List<StockSide> _targetSides(
-    StockState state, {
-    bool connectedOnly = false,
-  }) {
-    final sides =
-        _syncro ? <StockSide>[StockSide.a, StockSide.b] : [_selectedSide];
+  List<StockSide> _targetSides(StockState state, {bool connectedOnly = false}) {
+    final sides = _syncro
+        ? <StockSide>[StockSide.a, StockSide.b]
+        : [_selectedSide];
     if (!connectedOnly) {
       return sides.where((side) => _deviceId(state, side) != null).toList();
     }
@@ -1050,9 +1083,7 @@ class _VerticalHsvSlider extends StatelessWidget {
 class _BatteryRect extends StatelessWidget {
   final double percent;
 
-  const _BatteryRect({
-    required this.percent,
-  });
+  const _BatteryRect({required this.percent});
 
   @override
   Widget build(BuildContext context) {
@@ -1177,10 +1208,6 @@ class _StockSegmentCircle extends StatelessWidget {
         color: color,
       );
     }
-    return Container(
-      width: 74,
-      height: 74,
-      decoration: decoration,
-    );
+    return Container(width: 74, height: 74, decoration: decoration);
   }
 }

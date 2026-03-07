@@ -42,7 +42,11 @@ class _AppRootState extends ConsumerState<AppRoot> with WidgetsBindingObserver {
       if (!mounted) {
         return;
       }
-      await controller.autoConnectStored();
+      try {
+        await controller.autoConnectStored(timeout: const Duration(seconds: 4));
+      } catch (_) {
+        // Keep UI alive even if BLE stack throws during startup.
+      }
     });
   }
 
@@ -66,10 +70,20 @@ class _AppRootState extends ConsumerState<AppRoot> with WidgetsBindingObserver {
     if (!stock.registered) {
       return;
     }
-    final needsReconnect = stock.a.status != DeviceConnectionState.connected ||
+    final needsReconnect =
+        stock.a.status != DeviceConnectionState.connected ||
         stock.b.status != DeviceConnectionState.connected;
     if (needsReconnect) {
-      await controller.connectBoth();
+      try {
+        final ok = await controller.autoConnectStored(
+          timeout: const Duration(seconds: 4),
+        );
+        if (!ok) {
+          await controller.disconnectBoth();
+        }
+      } catch (_) {
+        await controller.disconnectBoth();
+      }
     }
   }
 

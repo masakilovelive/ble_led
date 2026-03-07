@@ -52,8 +52,9 @@ class StockSideState {
       status: status ?? this.status,
       pairNumber: pairNumber ?? this.pairNumber,
       role: role ?? this.role,
-      message:
-          identical(message, _sentinel) ? this.message : message as String?,
+      message: identical(message, _sentinel)
+          ? this.message
+          : message as String?,
       resyncStatus: resyncStatus ?? this.resyncStatus,
       resyncNote: identical(resyncNote, _sentinel)
           ? this.resyncNote
@@ -78,10 +79,7 @@ class StockState {
   });
 
   factory StockState.initial() {
-    return const StockState(
-      a: StockSideState(),
-      b: StockSideState(),
-    );
+    return const StockState(a: StockSideState(), b: StockSideState());
   }
 
   bool get registered => a.device != null && b.device != null;
@@ -155,15 +153,22 @@ class StockController extends StateNotifier<StockState> {
     await _loadStored();
   }
 
-  Future<void> autoConnectStored({
+  Future<bool> autoConnectStored({
     Duration timeout = const Duration(seconds: 10),
   }) async {
     await ensureLoaded();
     if (!state.registered) {
-      return;
+      return false;
     }
     await connectBoth();
-    await _waitForConnections(timeout);
+    final connected = await _waitForConnections(timeout);
+    if (!connected) {
+      await disconnectBoth();
+      _setMessage(
+        'Offline mode: dual control is available without connection.',
+      );
+    }
+    return connected;
   }
 
   Future<void> setAutoReconnect(bool enabled) async {
@@ -220,7 +225,8 @@ class StockController extends StateNotifier<StockState> {
       }
       if (state.hasPairMismatch) {
         _setMessage(
-            'N mismatch: A=${state.a.pairNumber}, B=${state.b.pairNumber}');
+          'N mismatch: A=${state.a.pairNumber}, B=${state.b.pairNumber}',
+        );
         return;
       }
       if (side == StockSide.a && state.roleMismatchA) {
@@ -245,35 +251,37 @@ class StockController extends StateNotifier<StockState> {
         ),
       );
 
-      final subscription = _client.connect(device.id).listen(
-        (update) {
-          _setSideState(
-            side,
-            _sideState(side).copyWith(status: update.connectionState),
+      final subscription = _client
+          .connect(device.id)
+          .listen(
+            (update) {
+              _setSideState(
+                side,
+                _sideState(side).copyWith(status: update.connectionState),
+              );
+              if (update.connectionState == DeviceConnectionState.connected) {
+                _reconnectTimers.remove(side)?.cancel();
+                unawaited(_handlePostConnect(side, device.id));
+              } else if (update.connectionState ==
+                  DeviceConnectionState.disconnected) {
+                _stopBatteryPolling(side);
+                _setResyncStatus(side, ResyncStatus.idle);
+                _scheduleReconnect(side);
+              }
+            },
+            onError: (e, st) {
+              _log.e('connect error', error: e, stackTrace: st);
+              _stopBatteryPolling(side);
+              _setSideState(
+                side,
+                _sideState(side).copyWith(
+                  status: DeviceConnectionState.disconnected,
+                  message: e.toString(),
+                ),
+              );
+              _scheduleReconnect(side);
+            },
           );
-          if (update.connectionState == DeviceConnectionState.connected) {
-            _reconnectTimers.remove(side)?.cancel();
-            unawaited(_handlePostConnect(side, device.id));
-          } else if (update.connectionState ==
-              DeviceConnectionState.disconnected) {
-            _stopBatteryPolling(side);
-            _setResyncStatus(side, ResyncStatus.idle);
-            _scheduleReconnect(side);
-          }
-        },
-        onError: (e, st) {
-          _log.e('connect error', error: e, stackTrace: st);
-          _stopBatteryPolling(side);
-          _setSideState(
-            side,
-            _sideState(side).copyWith(
-              status: DeviceConnectionState.disconnected,
-              message: e.toString(),
-            ),
-          );
-          _scheduleReconnect(side);
-        },
-      );
       _setConnection(side, subscription);
     });
   }
@@ -285,7 +293,8 @@ class StockController extends StateNotifier<StockState> {
     }
     if (state.hasPairMismatch) {
       _setMessage(
-          'N mismatch: A=${state.a.pairNumber}, B=${state.b.pairNumber}');
+        'N mismatch: A=${state.a.pairNumber}, B=${state.b.pairNumber}',
+      );
       return;
     }
     if (state.roleMismatchA || state.roleMismatchB) {
@@ -300,11 +309,9 @@ class StockController extends StateNotifier<StockState> {
     _manualDisconnect[side] = true;
     _reconnectTimers.remove(side)?.cancel();
     _stopBatteryPolling(side);
-    _ref.read(heartbeatControllerProvider).stop(
-          side,
-          sendOff: false,
-          resetMode: false,
-        );
+    _ref
+        .read(heartbeatControllerProvider)
+        .stop(side, sendOff: false, resetMode: false);
     await _cancelConnection(side);
     _setSideState(
       side,
@@ -349,8 +356,10 @@ class StockController extends StateNotifier<StockState> {
       for (final service in services) {
         serviceMap[service.serviceId.toString().toLowerCase()] = service
             .characteristics
-            .map((characteristic) =>
-                characteristic.characteristicId.toString().toLowerCase())
+            .map(
+              (characteristic) =>
+                  characteristic.characteristicId.toString().toLowerCase(),
+            )
             .toSet();
       }
 
@@ -400,19 +409,13 @@ class StockController extends StateNotifier<StockState> {
     }
   }
 
-  void _setResyncStatus(
-    StockSide side,
-    ResyncStatus status, {
-    String? note,
-  }) {
-    final clipped =
-        note != null && note.length > 40 ? note.substring(0, 40) : note;
+  void _setResyncStatus(StockSide side, ResyncStatus status, {String? note}) {
+    final clipped = note != null && note.length > 40
+        ? note.substring(0, 40)
+        : note;
     _setSideState(
       side,
-      _sideState(side).copyWith(
-        resyncStatus: status,
-        resyncNote: clipped,
-      ),
+      _sideState(side).copyWith(resyncStatus: status, resyncNote: clipped),
     );
   }
 
@@ -444,11 +447,9 @@ class StockController extends StateNotifier<StockState> {
       if (sideUi.top.mode == LedMode.rainbow ||
           sideUi.bottom.mode == LedMode.rainbow) {
         await led.startRainbow(deviceId, intervalMs: 40);
-        _ref.read(ledUiProvider.notifier).setSegmentMode(
-              side,
-              ColorZone.both,
-              LedMode.rainbow,
-            );
+        _ref
+            .read(ledUiProvider.notifier)
+            .setSegmentMode(side, ColorZone.both, LedMode.rainbow);
         _setResyncStatus(side, ResyncStatus.success, note: 'rainbow');
         return;
       }
@@ -574,11 +575,9 @@ class StockController extends StateNotifier<StockState> {
       }
       final voltage = _parseVoltage(data);
       final percent = _voltageToPercent(voltage);
-      _ref.read(ledUiProvider.notifier).setBatteryVoltage(
-            side,
-            voltage,
-            percent,
-          );
+      _ref
+          .read(ledUiProvider.notifier)
+          .setBatteryVoltage(side, voltage, percent);
       return voltage;
     } catch (e, st) {
       _log.w('battery read failed', error: e, stackTrace: st);
