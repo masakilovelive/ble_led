@@ -6,6 +6,7 @@ import asyncio
 from collections import Counter
 import csv
 import json
+import queue
 import re
 import shutil
 import subprocess
@@ -114,6 +115,9 @@ CONNECTION_FAILURE_NOTES = {
     "UNEXPECTED_LINK_DROP": "Link dropped unexpectedly before profile discovery stabilized.",
     "PROFILE_MISSING_LATCHED": "Reconnect was blocked because PROFILE_MISSING had been latched earlier.",
     "SERIAL_TRIGGERED_RESET_OR_LINK_DROP": "Opening the serial monitor likely reset the MCU or dropped the BLE link.",
+    "SENSOR_ON_MISMATCH": "MCU power-on sensor checkpoint did not match the expected level.",
+    "SENSOR_OFF_MISMATCH": "MCU power-off sensor checkpoint did not match the expected level.",
+    "MCU_COMMAND_TIMEOUT": "GUI sent a serial command to the MCU but the expected [STATE] response did not arrive in time.",
     "OTHER": "Failure observed but not yet classified in detail.",
 }
 
@@ -231,6 +235,7 @@ class SerialWorker(QThread):
         self._baud = baud
         self._stop = False
         self._serial = None
+        self._write_queue: "queue.Queue[str]" = queue.Queue()
 
     def run(self) -> None:
         try:
@@ -239,11 +244,17 @@ class SerialWorker(QThread):
             self.error.emit(f"pyserial missing: {exc}")
             return
         try:
-            self._serial = serial.Serial(self._port, self._baud, timeout=0.5)
+            self._serial = serial.Serial(
+                self._port,
+                self._baud,
+                timeout=0.1,
+                write_timeout=1.0,
+            )
         except Exception as exc:
             self.error.emit(f"serial open failed: {exc}")
             return
         while not self._stop:
+            self._drain_write_queue()
             try:
                 raw = self._serial.readline()
             except Exception as exc:
@@ -257,11 +268,35 @@ class SerialWorker(QThread):
                 line = str(raw)
             if line:
                 self.line_ready.emit(line)
+        self._drain_write_queue()
         self._close()
 
     def stop(self) -> None:
         self._stop = True
         self._close()
+
+    def send_line(self, line: str) -> bool:
+        if self._stop:
+            return False
+        self._write_queue.put(line)
+        return True
+
+    def _drain_write_queue(self) -> None:
+        if self._serial is None:
+            return
+        while True:
+            try:
+                line = self._write_queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                payload = (line.strip() + "\n").encode("utf-8")
+                self._serial.write(payload)
+                self._serial.flush()
+            except Exception as exc:
+                self.error.emit(f"serial write error: {exc}")
+                self._stop = True
+                break
 
     def _close(self) -> None:
         if self._serial:
@@ -381,6 +416,10 @@ class DualStateCheck(QWidget):
         self._endurance_fail_count = 0
         self._endurance_total_cycles = 0
         self._endurance_done_cycles = 0
+        self._endurance_stock_power: dict[str, Optional[bool]] = {
+            "A": None,
+            "B": None,
+        }
 
         self._device_map: dict[str, str] = {}
         self._slots = ["A1", "B1", "A2", "B2"]
@@ -503,6 +542,8 @@ class DualStateCheck(QWidget):
         self._active_sequence_csv_path: Optional[Path] = None
         self._logcat_worker: Optional[LogcatWorker] = None
         self._serial_worker: Optional[SerialWorker] = None
+        self._mcu_state_history: list[dict[str, object]] = []
+        self._mcu_state_waiters: list[asyncio.Future[None]] = []
         self._serial_color_handle = None
         self._serial_color_port: str = COM_PORT_NONE
         self._serial_color_baud = 115200
@@ -792,58 +833,95 @@ class DualStateCheck(QWidget):
 
         endurance_group = QGroupBox("Durability Test")
         endurance_layout = QGridLayout()
-        endurance_layout.addWidget(QLabel("Cycles"), 0, 0)
+        endurance_layout.addWidget(QLabel("Runner"), 0, 0)
+        self.endurance_runner_combo = QComboBox()
+        self.endurance_runner_combo.addItems(
+            ["PC BLE Control", "MCU Power Runner (UNO)"]
+        )
+        self.endurance_runner_combo.currentIndexChanged.connect(
+            self._refresh_endurance_runner_ui
+        )
+        endurance_layout.addWidget(self.endurance_runner_combo, 0, 1)
+        endurance_layout.addWidget(QLabel("MCU Pair"), 0, 2)
+        self.endurance_mcu_pair_combo = QComboBox()
+        self.endurance_mcu_pair_combo.addItems(self._pair_labels)
+        endurance_layout.addWidget(self.endurance_mcu_pair_combo, 0, 3)
+        endurance_layout.addWidget(QLabel("Cycles"), 0, 4)
         self.endurance_cycles_edit = QLineEdit("100")
         self.endurance_cycles_edit.setFixedWidth(80)
-        endurance_layout.addWidget(self.endurance_cycles_edit, 0, 1)
-        endurance_layout.addWidget(QLabel("Connect Wait (s)"), 0, 2)
+        endurance_layout.addWidget(self.endurance_cycles_edit, 0, 5)
+        endurance_layout.addWidget(QLabel("Connect Wait (s)"), 0, 6)
         self.endurance_connect_wait_edit = QLineEdit("0.5")
         self.endurance_connect_wait_edit.setFixedWidth(80)
-        endurance_layout.addWidget(self.endurance_connect_wait_edit, 0, 3)
-        endurance_layout.addWidget(QLabel("Disconnect Wait (s)"), 0, 4)
+        endurance_layout.addWidget(self.endurance_connect_wait_edit, 0, 7)
+        endurance_layout.addWidget(QLabel("Disconnect Wait (s)"), 1, 0)
         self.endurance_disconnect_wait_edit = QLineEdit("0.5")
         self.endurance_disconnect_wait_edit.setFixedWidth(80)
-        endurance_layout.addWidget(self.endurance_disconnect_wait_edit, 0, 5)
+        endurance_layout.addWidget(self.endurance_disconnect_wait_edit, 1, 1)
+
+        endurance_layout.addWidget(QLabel("MCU Off Guard (s)"), 1, 2)
+        self.endurance_mcu_off_guard_edit = QLineEdit("0.3")
+        self.endurance_mcu_off_guard_edit.setFixedWidth(80)
+        endurance_layout.addWidget(self.endurance_mcu_off_guard_edit, 1, 3)
+        endurance_layout.addWidget(QLabel("MCU A->B Delay (s)"), 1, 4)
+        self.endurance_mcu_ab_delay_edit = QLineEdit("0.7")
+        self.endurance_mcu_ab_delay_edit.setFixedWidth(80)
+        endurance_layout.addWidget(self.endurance_mcu_ab_delay_edit, 1, 5)
+        endurance_layout.addWidget(QLabel("MCU Boot Settle (s)"), 1, 6)
+        self.endurance_mcu_boot_settle_edit = QLineEdit("1.5")
+        self.endurance_mcu_boot_settle_edit.setFixedWidth(80)
+        endurance_layout.addWidget(self.endurance_mcu_boot_settle_edit, 1, 7)
 
         self.endurance_require_register_check = QCheckBox("Require Register Baseline")
         self.endurance_require_register_check.setChecked(True)
-        endurance_layout.addWidget(self.endurance_require_register_check, 1, 0, 1, 2)
+        endurance_layout.addWidget(self.endurance_require_register_check, 2, 0, 1, 2)
         self.endurance_run_gatt_check = QCheckBox("Run GATT/Battery Each Cycle")
         self.endurance_run_gatt_check.setChecked(True)
-        endurance_layout.addWidget(self.endurance_run_gatt_check, 1, 2, 1, 2)
+        endurance_layout.addWidget(self.endurance_run_gatt_check, 2, 2, 1, 2)
         self.endurance_ble_only_check = QCheckBox("Force BLE-only Parse")
         self.endurance_ble_only_check.setChecked(True)
-        endurance_layout.addWidget(self.endurance_ble_only_check, 1, 4, 1, 2)
+        endurance_layout.addWidget(self.endurance_ble_only_check, 2, 4, 1, 2)
         self.endurance_stop_on_fail_check = QCheckBox("Stop on First Failure")
         self.endurance_stop_on_fail_check.setChecked(False)
-        endurance_layout.addWidget(self.endurance_stop_on_fail_check, 1, 6, 1, 2)
+        endurance_layout.addWidget(self.endurance_stop_on_fail_check, 2, 6, 1, 2)
+        self.endurance_mcu_sensor_on_check = QCheckBox("MCU Sensor ON Check")
+        self.endurance_mcu_sensor_on_check.setChecked(True)
+        endurance_layout.addWidget(self.endurance_mcu_sensor_on_check, 3, 0, 1, 2)
+        self.endurance_mcu_sensor_off_check = QCheckBox("MCU Sensor OFF Check")
+        self.endurance_mcu_sensor_off_check.setChecked(True)
+        endurance_layout.addWidget(self.endurance_mcu_sensor_off_check, 3, 2, 1, 2)
+        self.endurance_mcu_note_label = QLabel(
+            "MCU mode uses Sequence tab Serial Port/Baud and runs only the selected A/B pair."
+        )
+        self.endurance_mcu_note_label.setStyleSheet("color:#bdbdbd;")
+        endurance_layout.addWidget(self.endurance_mcu_note_label, 3, 4, 1, 4)
 
         self.endurance_start_100_button = QPushButton("Start 100 Cycles")
         self.endurance_start_100_button.clicked.connect(
             lambda: self._start_endurance(100)
         )
-        endurance_layout.addWidget(self.endurance_start_100_button, 2, 0, 1, 2)
+        endurance_layout.addWidget(self.endurance_start_100_button, 4, 0, 1, 2)
         self.endurance_start_custom_button = QPushButton("Start Custom")
         self.endurance_start_custom_button.clicked.connect(
             lambda: self._start_endurance()
         )
-        endurance_layout.addWidget(self.endurance_start_custom_button, 2, 2, 1, 2)
+        endurance_layout.addWidget(self.endurance_start_custom_button, 4, 2, 1, 2)
         self.endurance_stop_button = QPushButton("Stop")
         self.endurance_stop_button.clicked.connect(self._stop_endurance)
         self.endurance_stop_button.setEnabled(False)
-        endurance_layout.addWidget(self.endurance_stop_button, 2, 4, 1, 2)
+        endurance_layout.addWidget(self.endurance_stop_button, 4, 4, 1, 2)
         self.endurance_copy_report_button = QPushButton("Copy Report Path")
         self.endurance_copy_report_button.clicked.connect(self._copy_endurance_report_path)
         self.endurance_copy_report_button.setEnabled(False)
-        endurance_layout.addWidget(self.endurance_copy_report_button, 2, 6, 1, 2)
+        endurance_layout.addWidget(self.endurance_copy_report_button, 4, 6, 1, 2)
 
         self.endurance_status_label = QLabel("IDLE")
-        endurance_layout.addWidget(self.endurance_status_label, 3, 0, 1, 2)
+        endurance_layout.addWidget(self.endurance_status_label, 5, 0, 1, 2)
         self.endurance_progress_label = QLabel("Cycle: 0/0")
-        endurance_layout.addWidget(self.endurance_progress_label, 3, 2, 1, 2)
+        endurance_layout.addWidget(self.endurance_progress_label, 5, 2, 1, 2)
         self.endurance_report_label = QLabel("Report: --")
         self.endurance_report_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        endurance_layout.addWidget(self.endurance_report_label, 3, 4, 1, 4)
+        endurance_layout.addWidget(self.endurance_report_label, 5, 4, 1, 4)
 
         endurance_group.setLayout(endurance_layout)
         layout.addWidget(endurance_group)
@@ -873,6 +951,7 @@ class DualStateCheck(QWidget):
             device_row.addWidget(pair_group)
         layout.addLayout(device_row)
 
+        self._refresh_endurance_runner_ui()
         root.setLayout(layout)
         return root
 
@@ -4616,13 +4695,61 @@ class DualStateCheck(QWidget):
                 return slot
         return None
 
+    def _parse_mcu_state_detail_map(self, detail: str) -> dict[str, str]:
+        values: dict[str, str] = {}
+        for token in detail.split():
+            if "=" not in token:
+                continue
+            key, value = token.split("=", 1)
+            key = key.strip().lower()
+            value = value.strip()
+            if key:
+                values[key] = value
+        return values
+
+    def _append_mcu_state_event(self, state: str, detail: str, line: str) -> None:
+        index = len(self._mcu_state_history)
+        self._mcu_state_history.append(
+            {
+                "index": index,
+                "state": state,
+                "detail": detail,
+                "detail_map": self._parse_mcu_state_detail_map(detail),
+                "line": line,
+                "time": time.perf_counter(),
+            }
+        )
+        if len(self._mcu_state_history) > 5000:
+            self._mcu_state_history = self._mcu_state_history[-5000:]
+        waiters = self._mcu_state_waiters
+        self._mcu_state_waiters = []
+        for waiter in waiters:
+            if not waiter.done():
+                waiter.set_result(None)
+
+    def _clear_mcu_state_history(self) -> None:
+        self._mcu_state_history.clear()
+        for side in ("A", "B"):
+            self._endurance_stock_power[side] = None
+        waiters = self._mcu_state_waiters
+        self._mcu_state_waiters = []
+        for waiter in waiters:
+            if not waiter.done():
+                waiter.cancel()
+
     def _update_mcu_from_line(self, line: str, to_sequence: bool) -> bool:
         match = MCU_STATE_PATTERN.search(line)
         if not match:
             return False
         state = match.group(1)
         detail = (match.group(2) or "").strip()
+        self._append_mcu_state_event(state, detail, line)
         slot = self._mcu_last_slot
+
+        if state == "CYCLE_START" and self._endurance_task and self._is_endurance_mcu_mode():
+            cycle_match = re.match(r"(\d+)\s*/\s*(\d+)", detail)
+            if cycle_match:
+                self._endurance_active_cycle = int(cycle_match.group(1))
 
         if state == "DEVICE_NAME" and detail:
             self._mcu_last_name = detail
@@ -4669,6 +4796,18 @@ class DualStateCheck(QWidget):
                     self._set_battery(slot, float(voltage_match.group(1)))
                 except ValueError:
                     pass
+        if state == "POWER_A_ON":
+            self._endurance_stock_power["A"] = True
+            self._refresh_endurance_visual_all()
+        elif state == "POWER_A_OFF":
+            self._endurance_stock_power["A"] = False
+            self._refresh_endurance_visual_all()
+        elif state == "POWER_B_ON":
+            self._endurance_stock_power["B"] = True
+            self._refresh_endurance_visual_all()
+        elif state == "POWER_B_OFF":
+            self._endurance_stock_power["B"] = False
+            self._refresh_endurance_visual_all()
 
         event_text = state
         if state == "VOLTAGE_READ":
@@ -4969,18 +5108,18 @@ class DualStateCheck(QWidget):
         self.logcat_start_button.setEnabled(True)
         self.logcat_stop_button.setEnabled(False)
 
-    def _start_serial(self) -> None:
+    def _start_serial(self) -> bool:
         if self._serial_worker and self._serial_worker.isRunning():
-            return
+            return True
         port = self.serial_port_combo.currentText().strip()
         if self._is_unconnected_port(port):
             self._show_error("Select a serial port")
-            return
+            return False
         try:
             baud = int(self.serial_baud_edit.text().strip())
         except ValueError:
             self._show_error("Invalid baud rate")
-            return
+            return False
         self._start_active_sequence_csv("serial")
         self._serial_worker = SerialWorker(port, baud)
         self._serial_worker.line_ready.connect(
@@ -4994,6 +5133,7 @@ class DualStateCheck(QWidget):
         self.serial_status.setText("RUNNING")
         self.serial_start_button.setEnabled(False)
         self.serial_stop_button.setEnabled(True)
+        return True
 
     def _stop_serial(self) -> None:
         if self._serial_worker:
@@ -7195,11 +7335,16 @@ class DualStateCheck(QWidget):
             output = self._slot_output_enabled.get(primary)
             if output is None:
                 output = self._slot_output_enabled.get(secondary)
+            power = self._endurance_stock_power.get(side)
             stock_text = f"Stock {side}: LED UNKNOWN"
             if output is True:
                 stock_text = f"Stock {side}: LED ON"
             elif output is False:
                 stock_text = f"Stock {side}: LED OFF"
+            elif power is True:
+                stock_text = f"Stock {side}: POWER ON"
+            elif power is False:
+                stock_text = f"Stock {side}: POWER OFF"
             if labels.get("stock"):
                 labels["stock"].setText(stock_text)
                 stock_bg = "#424242"
@@ -7207,15 +7352,19 @@ class DualStateCheck(QWidget):
                     stock_bg = "#c62828"
                 elif output is False:
                     stock_bg = "#1565c0"
+                elif power is True:
+                    stock_bg = "#ef6c00"
+                elif power is False:
+                    stock_bg = "#455a64"
                 self._set_label_style(labels["stock"], stock_bg, "#FFFFFF")
 
             on_label = self.endurance_stock_on_labels.get(side)
             off_label = self.endurance_stock_off_labels.get(side)
             if on_label:
-                on_bg = "#c62828" if output is True else "#7f1d1d"
+                on_bg = "#c62828" if (output is True or power is True) else "#7f1d1d"
                 self._set_label_style(on_label, on_bg, "#FFFFFF")
             if off_label:
-                off_bg = "#1565c0" if output is False else "#1e3a8a"
+                off_bg = "#1565c0" if (output is False or power is False) else "#1e3a8a"
                 self._set_label_style(off_label, off_bg, "#FFFFFF")
 
             voltage = self._slot_last_voltage.get(primary)
@@ -7225,7 +7374,13 @@ class DualStateCheck(QWidget):
             onoff_label = status_labels.get("onoff")
             volt_label = status_labels.get("volt")
             if onoff_label:
-                if output is True:
+                if power is True:
+                    onoff_label.setText("ON/OFF: ON")
+                    self._set_label_style(onoff_label, "#ef6c00", "#FFFFFF")
+                elif power is False:
+                    onoff_label.setText("ON/OFF: OFF")
+                    self._set_label_style(onoff_label, "#455a64", "#FFFFFF")
+                elif output is True:
                     onoff_label.setText("ON/OFF: ON")
                     self._set_label_style(onoff_label, "#c62828", "#FFFFFF")
                 elif output is False:
@@ -7260,7 +7415,11 @@ class DualStateCheck(QWidget):
                 else self.endurance_stock_center_b
             )
             center_text = f"Stock {side}: "
-            if output is True:
+            if power is True:
+                center_text += "POWER ON"
+            elif power is False:
+                center_text += "POWER OFF"
+            elif output is True:
                 center_text += "ON"
             elif output is False:
                 center_text += "OFF"
@@ -7270,7 +7429,11 @@ class DualStateCheck(QWidget):
                 center_text += f" / {voltage:.2f}V"
             center_label.setText(center_text)
             center_bg = "#455a64"
-            if output is True:
+            if power is True:
+                center_bg = "#ef6c00"
+            elif power is False:
+                center_bg = "#455a64"
+            elif output is True:
                 center_bg = "#c62828"
             elif output is False:
                 center_bg = "#1565c0"
@@ -7290,14 +7453,24 @@ class DualStateCheck(QWidget):
             self.endurance_visual_progress.setValue(0)
         if hasattr(self, "endurance_pc_status_label"):
             run_state = "RUNNING" if self._endurance_task and not self._endurance_task.done() else "IDLE"
+            runner = "MCU" if self._is_endurance_mcu_mode() else "PC"
             self.endurance_pc_status_label.setText(
-                f"PC: {run_state} ({done}/{total})"
+                f"PC: {run_state} [{runner}] ({done}/{total})"
             )
             pc_bg = "#1e88e5" if run_state == "RUNNING" else "#546e7a"
             self._set_label_style(self.endurance_pc_status_label, pc_bg, "#FFFFFF")
         if hasattr(self, "endurance_android_summary_label"):
-            connected = sum(1 for s in self._slots if self._android_conn_status.get(s) == "CONNECTED")
-            failed = sum(1 for s in self._slots if self._android_conn_status.get(s) == "FAILED")
+            summary_slots = (
+                self._endurance_target_slots(self._selected_endurance_pair_index())
+                if self._is_endurance_mcu_mode()
+                else self._slots
+            )
+            connected = sum(
+                1 for s in summary_slots if self._android_conn_status.get(s) == "CONNECTED"
+            )
+            failed = sum(
+                1 for s in summary_slots if self._android_conn_status.get(s) == "FAILED"
+            )
             self.endurance_android_summary_label.setText(
                 f"Android: CONNECTED={connected} FAILED={failed}"
             )
@@ -7322,6 +7495,7 @@ class DualStateCheck(QWidget):
                     f"{entry.get('elapsed', 0):7.3f}s [{entry.get('slot', '')}] {entry.get('event', '')}"
                 )
             summary = (
+                f"Runner: {'MCU' if self._is_endurance_mcu_mode() else 'PC'}\n"
                 f"Cycles: {done}/{total}  PASS={self._endurance_pass_count}  FAIL={self._endurance_fail_count}\n"
                 f"Report: {self._endurance_report_path or '--'}\n"
                 + "\n".join(lines)
@@ -7422,6 +7596,178 @@ class DualStateCheck(QWidget):
         finally:
             self.log("[AUTO] test stop")
 
+    def _endurance_runner_mode(self) -> str:
+        if hasattr(self, "endurance_runner_combo") and self.endurance_runner_combo.currentIndex() == 1:
+            return "mcu"
+        return "pc"
+
+    def _is_endurance_mcu_mode(self) -> bool:
+        return self._endurance_runner_mode() == "mcu"
+
+    def _selected_endurance_pair_index(self) -> int:
+        if not hasattr(self, "endurance_mcu_pair_combo"):
+            return 0
+        index = self.endurance_mcu_pair_combo.currentIndex()
+        if index < 0 or index >= len(self._pairs):
+            return 0
+        return index
+
+    def _refresh_endurance_runner_ui(self) -> None:
+        is_mcu = self._is_endurance_mcu_mode()
+        for attr in (
+            "endurance_mcu_pair_combo",
+            "endurance_mcu_off_guard_edit",
+            "endurance_mcu_ab_delay_edit",
+            "endurance_mcu_boot_settle_edit",
+            "endurance_mcu_sensor_on_check",
+            "endurance_mcu_sensor_off_check",
+        ):
+            widget = getattr(self, attr, None)
+            if widget is not None:
+                widget.setEnabled(is_mcu)
+        if hasattr(self, "endurance_mcu_note_label"):
+            note = (
+                "MCU mode uses Sequence tab Serial Port/Baud and runs only the selected A/B pair."
+                if is_mcu
+                else "PC mode uses the existing BLE connect/disconnect loop for all selected pairs."
+            )
+            self.endurance_mcu_note_label.setText(note)
+        if hasattr(self, "endurance_run_gatt_check"):
+            self.endurance_run_gatt_check.setEnabled(True)
+        self._refresh_endurance_visual_summary()
+
+    def _parse_endurance_mcu_config(self) -> Optional[dict[str, object]]:
+        try:
+            off_guard_s = float(self.endurance_mcu_off_guard_edit.text().strip())
+            ab_delay_s = float(self.endurance_mcu_ab_delay_edit.text().strip())
+            boot_settle_s = float(self.endurance_mcu_boot_settle_edit.text().strip())
+        except ValueError:
+            self._show_error("MCU timing must be numeric")
+            return None
+        if off_guard_s < 0 or ab_delay_s < 0 or boot_settle_s < 0:
+            self._show_error("MCU timing must be >= 0")
+            return None
+        return {
+            "pair_index": self._selected_endurance_pair_index(),
+            "off_guard_ms": max(0, int(round(off_guard_s * 1000.0))),
+            "ab_delay_ms": max(0, int(round(ab_delay_s * 1000.0))),
+            "boot_settle_ms": max(0, int(round(boot_settle_s * 1000.0))),
+            "sensor_on": self.endurance_mcu_sensor_on_check.isChecked(),
+            "sensor_off": self.endurance_mcu_sensor_off_check.isChecked(),
+        }
+
+    def _endurance_target_slots(self, pair_index: int) -> list[str]:
+        if pair_index < 0 or pair_index >= len(self._pairs):
+            return []
+        return list(self._pairs[pair_index])
+
+    def _serial_send_line(self, line: str) -> bool:
+        worker = self._serial_worker
+        if worker is None or not worker.isRunning():
+            self.log("[SERIAL] send skipped (monitor not running)")
+            return False
+        ok = worker.send_line(line)
+        if ok:
+            self.log(f"[SERIAL->MCU] {line}")
+        return ok
+
+    async def _wait_for_mcu_state(
+        self,
+        states: str | tuple[str, ...],
+        *,
+        timeout_s: float,
+        start_index: Optional[int] = None,
+        detail_contains: str = "",
+    ) -> Optional[dict[str, object]]:
+        wanted = {states} if isinstance(states, str) else set(states)
+        deadline = time.perf_counter() + max(0.0, timeout_s)
+        index = len(self._mcu_state_history) if start_index is None else max(0, start_index)
+        loop = asyncio.get_running_loop()
+        detail_filter = detail_contains.strip()
+        while True:
+            for event in self._mcu_state_history[index:]:
+                state = str(event.get("state", ""))
+                detail = str(event.get("detail", ""))
+                if state not in wanted:
+                    continue
+                if detail_filter and detail_filter not in detail:
+                    continue
+                return event
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                return None
+            waiter: asyncio.Future[None] = loop.create_future()
+            self._mcu_state_waiters.append(waiter)
+            index = len(self._mcu_state_history)
+            try:
+                await asyncio.wait_for(waiter, remaining)
+            except asyncio.TimeoutError:
+                if not waiter.done():
+                    waiter.cancel()
+                return None
+            finally:
+                if waiter in self._mcu_state_waiters:
+                    self._mcu_state_waiters.remove(waiter)
+
+    async def _send_mcu_command_wait(
+        self,
+        line: str,
+        expected_state: str,
+        *,
+        timeout_s: float,
+        detail_contains: str = "",
+    ) -> Optional[dict[str, object]]:
+        start_index = len(self._mcu_state_history)
+        if not self._serial_send_line(line):
+            return None
+        return await self._wait_for_mcu_state(
+            expected_state,
+            timeout_s=timeout_s,
+            start_index=start_index,
+            detail_contains=detail_contains,
+        )
+
+    async def _ensure_mcu_serial_ready(self) -> bool:
+        if self._serial_worker and self._serial_worker.isRunning():
+            return True
+        self._clear_mcu_state_history()
+        if not self._start_serial():
+            return False
+        ready = await self._wait_for_mcu_state(
+            ("MCU_READY", "POWER_A_ON", "POWER_A_OFF"),
+            timeout_s=5.0,
+            start_index=0,
+        )
+        if ready is None:
+            self.log("[ENDURANCE][MCU] MCU_READY timeout after serial start")
+            return False
+        await asyncio.sleep(0.2)
+        return True
+
+    def _record_endurance_outcome(self, cycle: int, cycles: int, record: dict) -> None:
+        self._endurance_cycle_records.append(record)
+        self._endurance_done_cycles = cycle
+        if record["result"] == "PASS":
+            self._endurance_pass_count += 1
+        else:
+            self._endurance_fail_count += 1
+        self._endurance_failure_counter[record["failure_class"]] += 1
+        self.endurance_progress_label.setText(f"Cycle: {cycle}/{cycles}")
+        if hasattr(self, "endurance_visual_last_label"):
+            self.endurance_visual_last_label.setText(
+                f"Last: cycle {cycle} {record['result']} ({record['failure_class']})"
+            )
+        self._refresh_endurance_visual_summary()
+        self._refresh_endurance_failure_table()
+
+    def _find_cycle_end_index(self, start_idx: int, cycle: int) -> int:
+        next_cycle_token = f"CYCLE_START {cycle + 1}/"
+        for idx in range(start_idx + 1, len(self._sequence_events)):
+            event_text = str(self._sequence_events[idx].get("event", ""))
+            if next_cycle_token in event_text:
+                return idx
+        return len(self._sequence_events)
+
     def _start_endurance(self, fixed_cycles: Optional[int] = None) -> None:
         if self._endurance_task and not self._endurance_task.done():
             return
@@ -7452,6 +7798,10 @@ class DualStateCheck(QWidget):
 
     def _stop_endurance(self) -> None:
         self._endurance_stop_requested = True
+        if self._is_endurance_mcu_mode():
+            if not self._serial_send_line("stop") and self._endurance_task and not self._endurance_task.done():
+                self._endurance_task.cancel()
+            return
         if self._endurance_task and not self._endurance_task.done():
             self._endurance_task.cancel()
 
@@ -7479,8 +7829,14 @@ class DualStateCheck(QWidget):
         self.endurance_start_100_button.setEnabled(not running)
         self.endurance_start_custom_button.setEnabled(not running)
         self.endurance_stop_button.setEnabled(running)
+        if hasattr(self, "endurance_runner_combo"):
+            self.endurance_runner_combo.setEnabled(not running)
+        if hasattr(self, "endurance_mcu_pair_combo"):
+            self.endurance_mcu_pair_combo.setEnabled(not running and self._is_endurance_mcu_mode())
         if running:
             self.endurance_status_label.setText("RUNNING")
+        else:
+            self._refresh_endurance_runner_ui()
         self._refresh_endurance_visual_summary()
 
     def _copy_endurance_report_path(self) -> None:
@@ -7491,7 +7847,17 @@ class DualStateCheck(QWidget):
     async def _run_endurance_loop(
         self, cycles: int, connect_wait_s: float, disconnect_wait_s: float
     ) -> None:
-        self.log(f"[ENDURANCE] start cycles={cycles}")
+        if self._is_endurance_mcu_mode():
+            await self._run_endurance_loop_mcu(
+                cycles, connect_wait_s, disconnect_wait_s
+            )
+            return
+        await self._run_endurance_loop_pc(cycles, connect_wait_s, disconnect_wait_s)
+
+    async def _run_endurance_loop_pc(
+        self, cycles: int, connect_wait_s: float, disconnect_wait_s: float
+    ) -> None:
+        self.log(f"[ENDURANCE] start cycles={cycles} runner=PC")
         self.endurance_progress_label.setText(f"Cycle: 0/{cycles}")
         self._endurance_total_cycles = cycles
         self._endurance_done_cycles = 0
@@ -7500,6 +7866,8 @@ class DualStateCheck(QWidget):
         self._endurance_failure_counter.clear()
         self._endurance_cycle_records.clear()
         self._endurance_report_path = None
+        for side in ("A", "B"):
+            self._endurance_stock_power[side] = None
         self.endurance_report_label.setText("Report: --")
         self.endurance_copy_report_button.setEnabled(False)
         if hasattr(self, "endurance_visual_last_label"):
@@ -7535,20 +7903,7 @@ class DualStateCheck(QWidget):
                 record = await self._run_endurance_cycle(
                     cycle, cycles, connect_wait_s, disconnect_wait_s
                 )
-                self._endurance_cycle_records.append(record)
-                self._endurance_done_cycles = cycle
-                if record["result"] == "PASS":
-                    self._endurance_pass_count += 1
-                else:
-                    self._endurance_fail_count += 1
-                self._endurance_failure_counter[record["failure_class"]] += 1
-                self.endurance_progress_label.setText(f"Cycle: {cycle}/{cycles}")
-                if hasattr(self, "endurance_visual_last_label"):
-                    self.endurance_visual_last_label.setText(
-                        f"Last: cycle {cycle} {record['result']} ({record['failure_class']})"
-                    )
-                self._refresh_endurance_visual_summary()
-                self._refresh_endurance_failure_table()
+                self._record_endurance_outcome(cycle, cycles, record)
                 if record["result"] == "FAIL" and self.endurance_stop_on_fail_check.isChecked():
                     self.log(f"[ENDURANCE] stop on fail at cycle={cycle}")
                     break
@@ -7557,7 +7912,7 @@ class DualStateCheck(QWidget):
             self.log("[ENDURANCE] cancelled")
         finally:
             self._endurance_active_cycle = None
-            await self._disconnect_both()
+            await self._disconnect_both(reason="endurance-pc-final")
 
         self._endurance_report_path = self._export_endurance_report_csv()
         if self._endurance_report_path:
@@ -7567,10 +7922,163 @@ class DualStateCheck(QWidget):
         if cancelled:
             raise asyncio.CancelledError
 
-    def _validate_register_baseline(self) -> tuple[bool, str]:
+    async def _run_endurance_loop_mcu(
+        self, cycles: int, connect_wait_s: float, disconnect_wait_s: float
+    ) -> None:
+        mcu_config = self._parse_endurance_mcu_config()
+        if not mcu_config:
+            self.endurance_status_label.setText("FAILED")
+            return
+        pair_index = int(mcu_config["pair_index"])
+        target_slots = self._endurance_target_slots(pair_index)
+        if len(target_slots) != 2:
+            self._show_error("MCU endurance target pair is invalid")
+            self.endurance_status_label.setText("FAILED")
+            return
+        ok, reason = self._pair_ok(pair_index)
+        if not ok:
+            self._show_error(f"{self._pair_labels[pair_index]} mismatch: {reason}")
+            self.endurance_status_label.setText("FAILED")
+            return
+        if not await self._ensure_mcu_serial_ready():
+            self._show_error("MCU serial monitor failed to start or did not respond")
+            self.endurance_status_label.setText("FAILED")
+            return
+
+        self.log(
+            f"[ENDURANCE] start cycles={cycles} runner=MCU pair={self._pair_labels[pair_index]}"
+        )
+        self.endurance_progress_label.setText(f"Cycle: 0/{cycles}")
+        self._endurance_total_cycles = cycles
+        self._endurance_done_cycles = 0
+        self._endurance_pass_count = 0
+        self._endurance_fail_count = 0
+        self._endurance_failure_counter.clear()
+        self._endurance_cycle_records.clear()
+        self._endurance_report_path = None
+        for side in ("A", "B"):
+            self._endurance_stock_power[side] = None
+        self.endurance_report_label.setText("Report: --")
+        self.endurance_copy_report_button.setEnabled(False)
+        if hasattr(self, "endurance_visual_last_label"):
+            self.endurance_visual_last_label.setText("Last: --")
+        self._refresh_endurance_visual_summary()
+        self._refresh_endurance_failure_table()
+
+        self._clear_sequence_events()
+        self._start_active_sequence_csv("endurance")
+        self._reset_android_conn_status()
+        self._clear_mcu_state_history()
+        self.mcu_add_sequence_check.setChecked(True)
+
+        if self.endurance_ble_only_check.isChecked():
+            self.android_ble_only_check.setChecked(True)
+            self.android_add_sequence_check.setChecked(True)
+
+        if self.auto_test_check.isChecked():
+            self.auto_test_check.setChecked(False)
+
+        if self.endurance_require_register_check.isChecked():
+            ok, reason = self._validate_register_baseline([pair_index])
+            if not ok:
+                self._record_sequence(f"REGISTER_INVALID {reason}", "TOOL")
+                self.log(f"[ENDURANCE] register baseline NG: {reason}")
+                self.endurance_status_label.setText("FAILED")
+                return
+            self._record_register_baseline([pair_index])
+
+        await self._disconnect_both(reason="endurance-mcu-prep")
+
+        config_commands = [
+            (f"set off {int(mcu_config['off_guard_ms'])}", "off"),
+            (f"set ab {int(mcu_config['ab_delay_ms'])}", "ab"),
+            (f"set bs {int(mcu_config['boot_settle_ms'])}", "bs"),
+            (f"set cw {max(0, int(round(connect_wait_s * 1000.0)))}", "cw"),
+            (f"set dw {max(0, int(round(disconnect_wait_s * 1000.0)))}", "dw"),
+            (f"set son {1 if mcu_config['sensor_on'] else 0}", "son"),
+            (f"set sof {1 if mcu_config['sensor_off'] else 0}", "sof"),
+            (
+                f"set stopfail {1 if self.endurance_stop_on_fail_check.isChecked() else 0}",
+                "stopfail",
+            ),
+        ]
+        for line, key in config_commands:
+            event = await self._send_mcu_command_wait(
+                line,
+                "CONFIG_UPDATED",
+                timeout_s=2.5,
+                detail_contains=key,
+            )
+            if event is None:
+                self._record_sequence(f"MCU_CONFIG_TIMEOUT {key}", "TOOL")
+                self.log(f"[ENDURANCE][MCU] config timeout key={key}")
+                self._record_connection_failure(
+                    "MCU_COMMAND_TIMEOUT",
+                    detail=f"CONFIG_UPDATED timeout ({key})",
+                    example=f"[ENDURANCE][MCU] config timeout key={key}",
+                )
+                self.endurance_status_label.setText("FAILED")
+                return
+
+        start_event = await self._send_mcu_command_wait(
+            f"run {cycles} {max(0, int(round(connect_wait_s * 1000.0)))} "
+            f"{max(0, int(round(disconnect_wait_s * 1000.0)))}",
+            "ENDURANCE_START",
+            timeout_s=3.0,
+        )
+        if start_event is None:
+            self.log("[ENDURANCE][MCU] ENDURANCE_START timeout")
+            self._record_connection_failure(
+                "MCU_COMMAND_TIMEOUT",
+                detail="ENDURANCE_START timeout",
+                example="[ENDURANCE][MCU] ENDURANCE_START timeout",
+            )
+            self.endurance_status_label.setText("FAILED")
+            return
+
+        cancelled = False
+        try:
+            for cycle in range(1, cycles + 1):
+                if self._endurance_stop_requested:
+                    break
+                record = await self._run_endurance_cycle_mcu(
+                    cycle,
+                    cycles,
+                    pair_index,
+                    target_slots,
+                    connect_wait_s,
+                    disconnect_wait_s,
+                    mcu_config,
+                )
+                self._record_endurance_outcome(cycle, cycles, record)
+                if record["result"] == "FAIL" and self.endurance_stop_on_fail_check.isChecked():
+                    self.log(f"[ENDURANCE] stop on fail at cycle={cycle}")
+                    break
+        except asyncio.CancelledError:
+            cancelled = True
+            self.log("[ENDURANCE] cancelled")
+        finally:
+            self._endurance_active_cycle = None
+            self._serial_send_line("stop")
+            await asyncio.sleep(0.2)
+            await self._disconnect_both(reason="endurance-mcu-final")
+
+        self._endurance_report_path = self._export_endurance_report_csv()
+        if self._endurance_report_path:
+            self.endurance_report_label.setText(f"Report: {self._endurance_report_path}")
+            self.endurance_copy_report_button.setEnabled(True)
+            self.log(f"[ENDURANCE] report {self._endurance_report_path}")
+        if cancelled:
+            raise asyncio.CancelledError
+
+    def _validate_register_baseline(
+        self, pair_indices: Optional[list[int]] = None
+    ) -> tuple[bool, str]:
         if not self._register_entries:
             return False, "register table empty"
-        for idx, (slot_a, slot_b) in enumerate(self._pairs):
+        indices = pair_indices if pair_indices is not None else list(range(len(self._pairs)))
+        for idx in indices:
+            slot_a, slot_b = self._pairs[idx]
             ok, reason = self._pair_ok(idx)
             if not ok:
                 return False, f"{self._pair_labels[idx]} {reason}"
@@ -7585,9 +8093,11 @@ class DualStateCheck(QWidget):
                 return False, f"{self._pair_labels[idx]} not registered ({a_name}/{b_name})"
         return True, "OK"
 
-    def _record_register_baseline(self) -> None:
+    def _record_register_baseline(self, pair_indices: Optional[list[int]] = None) -> None:
         self._record_sequence("REGISTER_BASELINE_OK", "TOOL")
-        for idx, (slot_a, slot_b) in enumerate(self._pairs):
+        indices = pair_indices if pair_indices is not None else list(range(len(self._pairs)))
+        for idx in indices:
+            slot_a, slot_b = self._pairs[idx]
             a_name = self._current_name(slot_a)
             b_name = self._current_name(slot_b)
             a_mac = self._device_map.get(a_name, self._mac_from_register(slot_a, a_name))
@@ -7598,12 +8108,279 @@ class DualStateCheck(QWidget):
                 "TOOL",
             )
 
-    def _all_selected_names_discovered(self) -> bool:
-        for slot in self._slots:
+    def _all_selected_names_discovered(self, slots: Optional[list[str]] = None) -> bool:
+        target_slots = slots if slots is not None else self._slots
+        for slot in target_slots:
             name = self._current_name(slot)
             if not name or name not in self._device_map:
                 return False
         return True
+
+    def _all_slots_connected(self, slots: list[str]) -> bool:
+        return all(
+            self._clients.get(slot) and self._clients[slot].is_connected
+            for slot in slots
+        )
+
+    async def _connect_endurance_slots(self, pair_index: int, slots: list[str]) -> bool:
+        pair_slots = list(self._pairs[pair_index]) if 0 <= pair_index < len(self._pairs) else []
+        if slots == pair_slots:
+            return await self._connect_pair_only(pair_index)
+        return await self._connect_only_slots(slots, staged=True)
+
+    async def _after_connected_slots(self, slots: list[str]) -> bool:
+        if not self._all_slots_connected(slots):
+            return False
+        all_battery_ok = True
+        for slot in slots:
+            battery_ok = await self._read_battery(slot)
+            all_battery_ok = all_battery_ok and battery_ok
+        self._update_collision_status()
+        return all_battery_ok
+
+    async def _gatt_test_slots(self, slots: list[str]) -> None:
+        for slot in slots:
+            client = self._clients.get(slot)
+            if not client or not client.is_connected:
+                self.log(f"[GATT] {slot} skipped (not connected)")
+                continue
+            await self._led_test(slot)
+            await self._read_battery(slot)
+
+    async def _run_endurance_cycle_mcu(
+        self,
+        cycle: int,
+        total_cycles: int,
+        pair_index: int,
+        target_slots: list[str],
+        connect_wait_s: float,
+        disconnect_wait_s: float,
+        mcu_config: dict[str, object],
+    ) -> dict:
+        start_idx = len(self._sequence_events)
+        start_iso = datetime.now().isoformat(timespec="milliseconds")
+        t0 = time.perf_counter()
+        self._endurance_active_cycle = cycle
+
+        dpm_a = self._dpm_profile.get("A", {})
+        dpm_b = self._dpm_profile.get("B", {})
+        if (
+            dpm_a.get("target_v") is not None
+            and dpm_a.get("pwm") is not None
+            and dpm_b.get("target_v") is not None
+            and dpm_b.get("pwm") is not None
+        ):
+            self._record_sequence(
+                "DPM_MARKER "
+                f"A={dpm_a.get('target_v'):.2f}V/{dpm_a.get('pwm'):.1f}% "
+                f"B={dpm_b.get('target_v'):.2f}V/{dpm_b.get('pwm'):.1f}%",
+                "TOOL",
+            )
+
+        t_scan = t0
+        t_connect = t0
+        t_gatt = t0
+        t_end = t0
+        scan_ok = False
+        connect_ok = False
+        gatt_ok = False
+        disconnect_ok = False
+
+        def _finalize(
+            result: str,
+            failure_class: str,
+            failure_detail: str,
+        ) -> dict:
+            nonlocal t_end
+            if t_end <= t0:
+                t_end = time.perf_counter()
+            end_iso = datetime.now().isoformat(timespec="milliseconds")
+            cycle_entries = self._sequence_events[
+                start_idx:self._find_cycle_end_index(start_idx, cycle)
+            ]
+            last_ble = self._tail_lines(cycle_entries, slot="ANDROID", ble_only=True, limit=5)
+            last_mcu = self._tail_lines(cycle_entries, slot="MCU", ble_only=False, limit=5)
+            rec = {
+                "cycle": cycle,
+                "start_iso": start_iso,
+                "end_iso": end_iso,
+                "result": result,
+                "failure_class": failure_class,
+                "failure_detail": failure_detail,
+                "scan_ms": (t_scan - t0) * 1000.0,
+                "connect_ms": (t_connect - t_scan) * 1000.0,
+                "gatt_ms": (t_gatt - t_connect) * 1000.0,
+                "disconnect_ms": (t_end - t_gatt) * 1000.0,
+                "total_ms": (t_end - t0) * 1000.0,
+                "scan_ok": scan_ok,
+                "connect_ok": connect_ok,
+                "gatt_ok": gatt_ok,
+                "disconnect_ok": disconnect_ok,
+                "last_ble": last_ble,
+                "last_mcu": last_mcu,
+                "active_csv": str(self._active_sequence_csv_path or ""),
+            }
+            self.log(
+                f"[ENDURANCE] cycle={cycle:03d} {result} "
+                f"scan={rec['scan_ms']:.0f}ms connect={rec['connect_ms']:.0f}ms "
+                f"gatt={rec['gatt_ms']:.0f}ms disconnect={rec['disconnect_ms']:.0f}ms "
+                f"class={failure_class}"
+            )
+            if result != "PASS":
+                self._record_connection_failure(
+                    failure_class,
+                    detail=failure_detail,
+                    example=(
+                        f"[ENDURANCE] cycle={cycle:03d} result={result} "
+                        f"class={failure_class} detail={failure_detail}"
+                    ),
+                )
+            self._endurance_active_cycle = None
+            return rec
+
+        cycle_start_event = await self._wait_for_mcu_state(
+            "CYCLE_START",
+            timeout_s=10.0,
+            start_index=0,
+            detail_contains=f"{cycle}/",
+        )
+        if cycle_start_event is None:
+            return _finalize(
+                "FAIL",
+                "MCU_COMMAND_TIMEOUT",
+                f"CYCLE_START timeout ({cycle}/{total_cycles})",
+            )
+
+        connect_window_event = await self._wait_for_mcu_state(
+            "CONNECT_WINDOW_BEGIN",
+            timeout_s=max(
+                5.0,
+                (int(mcu_config.get("boot_settle_ms", 0)) / 1000.0) + 5.0,
+            ),
+            start_index=int(cycle_start_event.get("index", 0)) + 1,
+        )
+        if connect_window_event is None:
+            return _finalize(
+                "FAIL",
+                "MCU_COMMAND_TIMEOUT",
+                "CONNECT_WINDOW_BEGIN timeout",
+            )
+
+        await self._scan_devices()
+        t_scan = time.perf_counter()
+        scan_ok = self._all_selected_names_discovered(target_slots)
+        if not scan_ok:
+            self._record_sequence("SCAN_EXPECTED_MISSING", "TOOL")
+
+        if scan_ok:
+            connect_ok = await self._connect_endurance_slots(pair_index, target_slots)
+        t_connect = time.perf_counter()
+        if connect_ok and connect_wait_s > 0:
+            await asyncio.sleep(connect_wait_s)
+
+        if connect_ok:
+            startup_ok = await self._run_startup_wave_slots(
+                target_slots,
+                repeat_count=len(self._startup_wave_colors),
+                cycle_seconds=1.0,
+            )
+            gatt_ok = startup_ok and await self._after_connected_slots(target_slots)
+            if self.endurance_run_gatt_check.isChecked():
+                await self._gatt_test_slots(target_slots)
+        t_gatt = time.perf_counter()
+
+        await self._disconnect_both(reason=f"endurance-mcu-cycle-{cycle}")
+
+        connect_window_ms = 0
+        detail_map = connect_window_event.get("detail_map", {})
+        if isinstance(detail_map, dict):
+            try:
+                connect_window_ms = int(str(detail_map.get("ms", "0")))
+            except ValueError:
+                connect_window_ms = 0
+        connect_window_end = await self._wait_for_mcu_state(
+            "CONNECT_WINDOW_END",
+            timeout_s=max(
+                2.0,
+                connect_wait_s + 2.0,
+                (connect_window_ms / 1000.0) + 2.0,
+            ),
+            start_index=int(connect_window_event.get("index", 0)) + 1,
+        )
+        if connect_window_end is None:
+            return _finalize(
+                "FAIL",
+                "MCU_COMMAND_TIMEOUT",
+                "CONNECT_WINDOW_END timeout",
+            )
+
+        disconnect_window_event = await self._wait_for_mcu_state(
+            "DISCONNECT_WINDOW_BEGIN",
+            timeout_s=max(2.0, disconnect_wait_s + 2.0),
+            start_index=int(connect_window_end.get("index", 0)) + 1,
+        )
+        if disconnect_window_event is None:
+            return _finalize(
+                "FAIL",
+                "MCU_COMMAND_TIMEOUT",
+                "DISCONNECT_WINDOW_BEGIN timeout",
+            )
+
+        disconnect_window_ms = 0
+        detail_map = disconnect_window_event.get("detail_map", {})
+        if isinstance(detail_map, dict):
+            try:
+                disconnect_window_ms = int(str(detail_map.get("ms", "0")))
+            except ValueError:
+                disconnect_window_ms = 0
+        disconnect_window_end = await self._wait_for_mcu_state(
+            "DISCONNECT_WINDOW_END",
+            timeout_s=max(
+                2.0,
+                disconnect_wait_s + 2.0,
+                (disconnect_window_ms / 1000.0) + 2.0,
+            ),
+            start_index=int(disconnect_window_event.get("index", 0)) + 1,
+        )
+        if disconnect_window_end is None:
+            return _finalize(
+                "FAIL",
+                "MCU_COMMAND_TIMEOUT",
+                "DISCONNECT_WINDOW_END timeout",
+            )
+
+        disconnect_ok = self._all_disconnected()
+        t_end = time.perf_counter()
+
+        await self._wait_for_mcu_state(
+            ("ENDURANCE_DONE", "CYCLE_START"),
+            timeout_s=max(
+                1.0,
+                (int(mcu_config.get("off_guard_ms", 0)) / 1000.0) + 1.5,
+            ),
+            start_index=int(disconnect_window_end.get("index", 0)) + 1,
+        )
+
+        cycle_entries = self._sequence_events[
+            start_idx:self._find_cycle_end_index(start_idx, cycle)
+        ]
+        all_text = " ".join(str(entry.get("event", "")) for entry in cycle_entries).lower()
+        mcu_cycle_failed = any(
+            token in all_text
+            for token in ("cycle_fail", "sensor_on_ng", "sensor_off_ng")
+        )
+        result = (
+            "PASS"
+            if (scan_ok and connect_ok and gatt_ok and disconnect_ok and not mcu_cycle_failed)
+            else "FAIL"
+        )
+        failure_class, failure_detail = self._classify_cycle_failure(
+            cycle_entries, scan_ok, connect_ok, gatt_ok, disconnect_ok
+        )
+        if result == "PASS":
+            failure_class = "PASS"
+            failure_detail = ""
+        return _finalize(result, failure_class, failure_detail)
 
     async def _run_endurance_cycle(
         self,
@@ -7752,6 +8529,31 @@ class DualStateCheck(QWidget):
                 flat_cycle_ids.add(cid)
         if len(flat_cycle_ids) > 1:
             return "LOG_MIXED_OLD_DATA", "multiple cycle ids detected in one cycle window"
+        if (
+            "mcu_command_timeout" in all_text
+            or "mcu_config_timeout" in all_text
+            or (
+                "timeout" in all_text
+                and (
+                    "cycle_start" in all_text
+                    or "connect_window" in all_text
+                    or "disconnect_window" in all_text
+                )
+            )
+        ):
+            return "MCU_COMMAND_TIMEOUT", "expected MCU state did not arrive in time"
+        if (
+            "sensor_on_ng" in all_text
+            or "sensor_on_mismatch" in all_text
+            or "cycle_fail sensor_on_mismatch" in all_text
+        ):
+            return "SENSOR_ON_MISMATCH", "sensor-on checkpoint mismatch"
+        if (
+            "sensor_off_ng" in all_text
+            or "sensor_off_mismatch" in all_text
+            or "cycle_fail sensor_off_mismatch" in all_text
+        ):
+            return "SENSOR_OFF_MISMATCH", "sensor-off checkpoint mismatch"
         if "status 133" in all_text or "gatt_error" in all_text:
             return "STATUS_133_GATT_ERROR", "status 133 / gatt_error"
         if "0x0016" in all_text or "reason 0x0016" in all_text:
