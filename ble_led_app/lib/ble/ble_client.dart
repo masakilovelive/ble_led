@@ -36,6 +36,7 @@ class BleClient {
   }
 
   Future<List<DiscoveredService>> discoverServices(String deviceId) async {
+    // ignore: deprecated_member_use
     return _ble.discoverServices(deviceId);
   }
 

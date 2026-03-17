@@ -332,13 +332,19 @@ class PairTestController extends StateNotifier<PairTestState> {
     try {
       final aId = state.a.device!.id;
       final bId = state.b.device!.id;
-      await _led.writeLevel(aId, 0x01);
+      await _led.setOutputEnabled(aId, true);
+      await _led.setBrightness(aId, 255);
+      await _led.setFrontColor(aId, 255, 255, 255);
+      await _led.setRearColor(aId, 255, 255, 255);
       await Future.delayed(const Duration(milliseconds: 250));
-      await _led.writeLevel(bId, 0x01);
+      await _led.setOutputEnabled(bId, true);
+      await _led.setBrightness(bId, 255);
+      await _led.setFrontColor(bId, 255, 255, 255);
+      await _led.setRearColor(bId, 255, 255, 255);
       await Future.delayed(const Duration(milliseconds: 250));
-      await _led.writeLevel(aId, 0x00);
+      await _led.applyIdleState(aId);
       await Future.delayed(const Duration(milliseconds: 200));
-      await _led.writeLevel(bId, 0x00);
+      await _led.applyIdleState(bId);
       _appendLog('Collision test complete');
     } catch (e, st) {
       _log.e('collision test failed', error: e, stackTrace: st);

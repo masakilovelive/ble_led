@@ -26,6 +26,7 @@ htmlcov/
 /dist/
 tmp/
 temp/
+.arduino-build/
 
 # Flutter / Dart
 **/.dart_tool/

@@ -86,6 +86,7 @@ class LedController {
     required StockSide side,
     required Color color,
   }) async {
+    // ignore: deprecated_member_use
     await setFrontColor(deviceId, color.red, color.green, color.blue);
   }
 
@@ -94,6 +95,7 @@ class LedController {
     required StockSide side,
     required Color color,
   }) async {
+    // ignore: deprecated_member_use
     await setRearColor(deviceId, color.red, color.green, color.blue);
   }
 
@@ -136,7 +138,6 @@ class LedController {
     await _safeIdle('output disable', () => setOutputEnabled(deviceId, false));
     await _safeIdle('rainbow stop', () => stopRainbow(deviceId));
     await _safeIdle('accel off', () => setAccelMode(deviceId, false));
-    await _safeIdle('alert off', () => writeLevel(deviceId, 0x00));
     await _safeIdle('front off', () => setFrontColor(deviceId, 0, 0, 0));
     await _safeIdle('rear off', () => setRearColor(deviceId, 0, 0, 0));
   }

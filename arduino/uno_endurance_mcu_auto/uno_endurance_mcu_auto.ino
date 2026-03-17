@@ -1,8 +1,8 @@
 /*
   UNO endurance automation helper
-  - Stock A/B power control with staged boot sequence
+  - D6/D7 simultaneous power control for endurance sequence
+  - D5 start pulse for target MCU startup
   - Sensor monitor on D12 / D13
-  - X9C103S digital potentiometer control (INC/U-D/CS)
   - Automated endurance cycle runner for GUI endurance workflow
 
   Serial monitor: 115200 baud
@@ -15,20 +15,22 @@
 static const uint8_t PIN_SENSOR_A = 12;
 static const uint8_t PIN_SENSOR_B = 13;
 
-static const uint8_t PIN_X9C_INC = 9;
-static const uint8_t PIN_X9C_UD = 8;
-static const uint8_t PIN_X9C_CS = 10;
+// Optional manual X9C control is kept on module A only and initialized on demand.
+static const uint8_t PIN_X9C_A_INC = 9;
+static const uint8_t PIN_X9C_A_UD = 8;
+static const uint8_t PIN_X9C_A_CS = 10;
 
 static const uint8_t PIN_PWR_A = 6;
 static const uint8_t PIN_PWR_B = 7;
+static const uint8_t PIN_START_PULSE = 5;
 
 // --------------------------- Behavior config ---------------------------
 static const bool SENSOR_USE_PULLUP = false;
 static const bool SENSOR_ON_LEVEL_HIGH = true;
-static const bool CALIBRATE_TO_MIN_ON_BOOT = true;
 
 static const bool POWER_ACTIVE_HIGH = true;
-static const bool AUTO_BOOT_STOCK_SEQUENCE_ON_BOOT = true;
+static const bool START_PULSE_ACTIVE_HIGH = true;
+static const bool AUTO_BOOT_STOCK_SEQUENCE_ON_BOOT = false;
 
 static const uint16_t SENSOR_POLL_MS = 20;
 static const uint16_t SENSOR_DEBOUNCE_MS = 10;
@@ -39,14 +41,13 @@ static const int X9C_MAX_TAP = 99;
 static const long X9C_TOTAL_OHMS = 10000L;  // X9C103S = 10k
 
 // Default endurance timing (aligned with GUI defaults)
-static const uint16_t DEF_POWER_OFF_GUARD_MS = 300;
-static const uint16_t DEF_POWER_A_TO_B_DELAY_MS = 700;
-static const uint16_t DEF_POWER_BOOT_SETTLE_MS = 1500;
+static const uint16_t DEF_POWER_OFF_GUARD_MS = 0;
+static const uint16_t DEF_POWER_A_TO_B_DELAY_MS = 2000;
+static const uint16_t DEF_POWER_BOOT_SETTLE_MS = 2000;
 static const uint16_t DEF_CONNECT_WAIT_MS = 500;
 static const uint16_t DEF_DISCONNECT_WAIT_MS = 500;
 
 // --------------------------- Runtime state ---------------------------
-static int g_currentTap = -1;
 static uint32_t g_lastSensorPollMs = 0;
 
 static bool g_lastRawA = LOW;
@@ -58,13 +59,31 @@ static uint32_t g_lastRawChangeBMs = 0;
 
 static bool g_powerAEnabled = false;
 static bool g_powerBEnabled = false;
+static bool g_startPulseEnabled = false;
+static bool g_sequencePinsConfigured = false;
+static bool g_x9cPinsInitialized = false;
+
+struct X9cModuleState {
+  const char *name;
+  uint8_t pinInc;
+  uint8_t pinUd;
+  uint8_t pinCs;
+  int currentTap;
+};
+
+static X9cModuleState g_x9cModules[] = {
+    {"A", PIN_X9C_A_INC, PIN_X9C_A_UD, PIN_X9C_A_CS, -1},
+};
+static const uint8_t X9C_MODULE_COUNT = sizeof(g_x9cModules) / sizeof(g_x9cModules[0]);
+
+bool isUnsignedNumber(const String &s);
 
 // --------------------------- Endurance runtime ---------------------------
 enum EnduranceStage : uint8_t {
   END_IDLE = 0,
   END_POWER_OFF_GUARD,
-  END_POWER_A_DELAY,
-  END_POWER_BOOT_SETTLE,
+  END_POWER_ON_DELAY,
+  END_START_PULSE,
   END_CONNECT_WINDOW,
   END_DISCONNECT_WINDOW,
 };
@@ -81,8 +100,8 @@ static uint16_t g_endurancePass = 0;
 static uint16_t g_enduranceFail = 0;
 
 static uint16_t g_powerOffGuardMs = DEF_POWER_OFF_GUARD_MS;
-static uint16_t g_powerAToBDelayMs = DEF_POWER_A_TO_B_DELAY_MS;
-static uint16_t g_powerBootSettleMs = DEF_POWER_BOOT_SETTLE_MS;
+static uint16_t g_powerAToBDelayMs = DEF_POWER_A_TO_B_DELAY_MS;   // D6/D7 ON -> D5 ON delay
+static uint16_t g_powerBootSettleMs = DEF_POWER_BOOT_SETTLE_MS;   // D5 ON duration
 static uint16_t g_connectWaitMs = DEF_CONNECT_WAIT_MS;
 static uint16_t g_disconnectWaitMs = DEF_DISCONNECT_WAIT_MS;
 
@@ -134,15 +153,22 @@ void printPowerStatus() {
   Serial.println(onoff(g_powerBEnabled));
 }
 
-void printX9CStatus() {
-  long approx = (X9C_TOTAL_OHMS * (long)g_currentTap) / X9C_MAX_TAP;
-  Serial.print(F("[X9C] tap="));
-  Serial.print(g_currentTap);
+void printX9CStatus(const X9cModuleState &module) {
+  Serial.print(F("[X9C] "));
+  Serial.print(module.name);
+  Serial.print(F(" tap="));
+  Serial.print(module.currentTap);
   Serial.print(F(" / "));
   Serial.print(X9C_MAX_TAP);
   Serial.print(F(", approx="));
-  Serial.print(approx);
+  Serial.print((X9C_TOTAL_OHMS * (long)module.currentTap) / X9C_MAX_TAP);
   Serial.println(F(" ohm"));
+}
+
+void printAllX9CStatus() {
+  for (uint8_t i = 0; i < X9C_MODULE_COUNT; ++i) {
+    printX9CStatus(g_x9cModules[i]);
+  }
 }
 
 void printEnduranceStatus() {
@@ -164,9 +190,9 @@ void printConfig() {
   Serial.println(F("[CFG] endurance config"));
   Serial.print(F("  off_guard_ms="));
   Serial.println(g_powerOffGuardMs);
-  Serial.print(F("  a_to_b_ms="));
+  Serial.print(F("  power_to_d5_ms="));
   Serial.println(g_powerAToBDelayMs);
-  Serial.print(F("  boot_settle_ms="));
+  Serial.print(F("  d5_pulse_ms="));
   Serial.println(g_powerBootSettleMs);
   Serial.print(F("  connect_wait_ms="));
   Serial.println(g_connectWaitMs);
@@ -191,18 +217,19 @@ void printHelp() {
   Serial.println(F("  pa on|off             : stock A power"));
   Serial.println(F("  pb on|off             : stock B power"));
   Serial.println(F("  pon / poff            : both ON / both OFF"));
-  Serial.println(F("  boot                  : OFF->A->B one-shot boot sequence"));
-  Serial.println(F("x9c control:"));
-  Serial.println(F("  +  -  min  max  sweep : x9c commands"));
-  Serial.println(F("  s<N>                  : set x9c tap (0..99), ex: s45"));
+  Serial.println(F("  boot                  : D6/D7 ON -> wait -> D5 pulse"));
+  Serial.println(F("x9c control (module A only):"));
+  Serial.println(F("  +  -  min  max  sweep : apply to X9C A"));
+  Serial.println(F("  s<N>                  : set X9C A tap (0..99), ex: s45"));
+  Serial.println(F("  xa r|+|-|min|max|s<N>|sweep"));
   Serial.println(F("endurance automation:"));
   Serial.println(F("  run <cycles> [cw] [dw]: start endurance, cw/dw in ms"));
   Serial.println(F("  stop                  : request stop"));
   Serial.println(F("  set off <ms>          : power off guard"));
-  Serial.println(F("  set ab <ms>           : A->B delay"));
-  Serial.println(F("  set bs <ms>           : boot settle"));
+  Serial.println(F("  set ab <ms>           : D6/D7 ON -> D5 ON delay"));
+  Serial.println(F("  set bs <ms>           : D5 ON duration"));
   Serial.println(F("  set cw <ms>           : connect wait"));
-  Serial.println(F("  set dw <ms>           : disconnect wait"));
+  Serial.println(F("  set dw <ms>           : power-OFF interval (500ms = 2Hz)"));
   Serial.println(F("  set son <0|1>         : check sensor in power-on phase"));
   Serial.println(F("  set sof <0|1>         : check sensor in power-off phase"));
   Serial.println(F("  set stopfail <0|1>    : stop endurance on first fail"));
@@ -210,73 +237,181 @@ void printHelp() {
 }
 
 // --------------------------- X9C103S control ---------------------------
-void x9cPulseInc() {
-  digitalWrite(PIN_X9C_INC, HIGH);
-  delayMicroseconds(X9C_PULSE_US);
-  digitalWrite(PIN_X9C_INC, LOW);
-  delayMicroseconds(X9C_PULSE_US);
-  digitalWrite(PIN_X9C_INC, HIGH);
+void ensureX9cPinsReady() {
+  if (g_x9cPinsInitialized) return;
+  for (uint8_t i = 0; i < X9C_MODULE_COUNT; ++i) {
+    pinMode(g_x9cModules[i].pinInc, OUTPUT);
+    pinMode(g_x9cModules[i].pinUd, OUTPUT);
+    pinMode(g_x9cModules[i].pinCs, OUTPUT);
+    digitalWrite(g_x9cModules[i].pinInc, HIGH);
+    digitalWrite(g_x9cModules[i].pinUd, HIGH);
+    digitalWrite(g_x9cModules[i].pinCs, HIGH);
+  }
+  g_x9cPinsInitialized = true;
 }
 
-void x9cStepRaw(bool up) {
-  digitalWrite(PIN_X9C_CS, LOW);
-  digitalWrite(PIN_X9C_UD, up ? HIGH : LOW);
+void x9cPulseInc(const X9cModuleState &module) {
+  ensureX9cPinsReady();
+  digitalWrite(module.pinInc, HIGH);
   delayMicroseconds(X9C_PULSE_US);
-  x9cPulseInc();
+  digitalWrite(module.pinInc, LOW);
+  delayMicroseconds(X9C_PULSE_US);
+  digitalWrite(module.pinInc, HIGH);
+}
+
+void x9cStepRaw(const X9cModuleState &module, bool up) {
+  ensureX9cPinsReady();
+  digitalWrite(module.pinCs, LOW);
+  digitalWrite(module.pinUd, up ? HIGH : LOW);
+  delayMicroseconds(X9C_PULSE_US);
+  x9cPulseInc(module);
   delay(X9C_STEP_DELAY_MS);
-  digitalWrite(PIN_X9C_CS, HIGH);  // store new position
+  digitalWrite(module.pinCs, HIGH);  // store new position
   delayMicroseconds(X9C_PULSE_US);
 }
 
-void x9cMoveToMin() {
+void x9cMoveToMin(X9cModuleState &module) {
+  ensureX9cPinsReady();
   // Over-step to guarantee minimum position.
-  digitalWrite(PIN_X9C_CS, LOW);
-  digitalWrite(PIN_X9C_UD, LOW);
+  digitalWrite(module.pinCs, LOW);
+  digitalWrite(module.pinUd, LOW);
   delayMicroseconds(X9C_PULSE_US);
   for (int i = 0; i < 120; ++i) {
-    x9cPulseInc();
+    x9cPulseInc(module);
     delay(X9C_STEP_DELAY_MS);
   }
-  digitalWrite(PIN_X9C_CS, HIGH);
+  digitalWrite(module.pinCs, HIGH);
   delayMicroseconds(X9C_PULSE_US);
-  g_currentTap = 0;
+  module.currentTap = 0;
 }
 
-void x9cSetTap(int target) {
+void x9cSetTap(X9cModuleState &module, int target) {
   if (target < 0) target = 0;
   if (target > X9C_MAX_TAP) target = X9C_MAX_TAP;
 
-  if (g_currentTap < 0) {
-    x9cMoveToMin();
+  if (module.currentTap < 0) {
+    x9cMoveToMin(module);
   }
 
-  while (g_currentTap < target) {
-    x9cStepRaw(true);
-    g_currentTap++;
+  while (module.currentTap < target) {
+    x9cStepRaw(module, true);
+    module.currentTap++;
   }
-  while (g_currentTap > target) {
-    x9cStepRaw(false);
-    g_currentTap--;
+  while (module.currentTap > target) {
+    x9cStepRaw(module, false);
+    module.currentTap--;
   }
 }
 
-void x9cStep(int delta) {
-  if (g_currentTap < 0) {
-    x9cMoveToMin();
+void x9cStep(X9cModuleState &module, int delta) {
+  if (module.currentTap < 0) {
+    x9cMoveToMin(module);
   }
-  x9cSetTap(g_currentTap + delta);
+  x9cSetTap(module, module.currentTap + delta);
 }
 
-void x9cSweepDemo() {
-  Serial.println(F("[X9C] sweep start"));
-  x9cSetTap(0);
+void x9cSweepDemo(X9cModuleState &module) {
+  Serial.print(F("[X9C] "));
+  Serial.print(module.name);
+  Serial.println(F(" sweep start"));
+  x9cSetTap(module, 0);
   for (int i = 1; i <= X9C_MAX_TAP; ++i) {
-    x9cSetTap(i);
+    x9cSetTap(module, i);
   }
   for (int i = X9C_MAX_TAP - 1; i >= 0; --i) {
-    x9cSetTap(i);
+    x9cSetTap(module, i);
   }
-  Serial.println(F("[X9C] sweep done"));
+  Serial.print(F("[X9C] "));
+  Serial.print(module.name);
+  Serial.println(F(" sweep done"));
+}
+
+bool handleX9cModuleCommand(const String &cmd, X9cModuleState &module) {
+  if (cmd == "r" || cmd == "status") {
+    printX9CStatus(module);
+    return true;
+  }
+  if (cmd == "+") {
+    x9cStep(module, +1);
+    printX9CStatus(module);
+    return true;
+  }
+  if (cmd == "-") {
+    x9cStep(module, -1);
+    printX9CStatus(module);
+    return true;
+  }
+  if (cmd == "min") {
+    x9cSetTap(module, 0);
+    printX9CStatus(module);
+    return true;
+  }
+  if (cmd == "max") {
+    x9cSetTap(module, X9C_MAX_TAP);
+    printX9CStatus(module);
+    return true;
+  }
+  if (cmd == "sweep") {
+    x9cSweepDemo(module);
+    printX9CStatus(module);
+    return true;
+  }
+  if (cmd.startsWith("s")) {
+    String n = cmd.substring(1);
+    n.trim();
+    if (isUnsignedNumber(n)) {
+      x9cSetTap(module, n.toInt());
+      printX9CStatus(module);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool handleX9cAllCommand(const String &cmd) {
+  const bool isTapSetCommand = cmd.startsWith("s") && isUnsignedNumber(cmd.substring(1));
+  const bool isX9cCommand =
+      (cmd == "+") || (cmd == "-") || (cmd == "min") || (cmd == "max") || (cmd == "sweep") || isTapSetCommand;
+
+  if (!isX9cCommand) {
+    return false;
+  }
+  if (cmd == "+") {
+    for (uint8_t i = 0; i < X9C_MODULE_COUNT; ++i) x9cStep(g_x9cModules[i], +1);
+    printAllX9CStatus();
+    return true;
+  }
+  if (cmd == "-") {
+    for (uint8_t i = 0; i < X9C_MODULE_COUNT; ++i) x9cStep(g_x9cModules[i], -1);
+    printAllX9CStatus();
+    return true;
+  }
+  if (cmd == "min") {
+    for (uint8_t i = 0; i < X9C_MODULE_COUNT; ++i) x9cSetTap(g_x9cModules[i], 0);
+    printAllX9CStatus();
+    return true;
+  }
+  if (cmd == "max") {
+    for (uint8_t i = 0; i < X9C_MODULE_COUNT; ++i) x9cSetTap(g_x9cModules[i], X9C_MAX_TAP);
+    printAllX9CStatus();
+    return true;
+  }
+  if (cmd == "sweep") {
+    for (uint8_t i = 0; i < X9C_MODULE_COUNT; ++i) x9cSweepDemo(g_x9cModules[i]);
+    printAllX9CStatus();
+    return true;
+  }
+  if (cmd.startsWith("s")) {
+    String n = cmd.substring(1);
+    n.trim();
+    if (isUnsignedNumber(n)) {
+      const int target = n.toInt();
+      for (uint8_t i = 0; i < X9C_MODULE_COUNT; ++i) x9cSetTap(g_x9cModules[i], target);
+      printAllX9CStatus();
+      return true;
+    }
+  }
+  return false;
 }
 
 // --------------------------- Power control ---------------------------
@@ -284,11 +419,70 @@ bool toPowerPinLevel(bool enabled) {
   return POWER_ACTIVE_HIGH ? enabled : !enabled;
 }
 
+bool toStartPulseLevel(bool enabled) {
+  return START_PULSE_ACTIVE_HIGH ? enabled : !enabled;
+}
+
 void writePowerPin(uint8_t pin, bool enabled) {
   digitalWrite(pin, toPowerPinLevel(enabled) ? HIGH : LOW);
 }
 
+void writeStartPulsePin(bool enabled) {
+  digitalWrite(PIN_START_PULSE, toStartPulseLevel(enabled) ? HIGH : LOW);
+}
+
+void ensureSequencePinsReady() {
+  if (g_sequencePinsConfigured) return;
+  pinMode(PIN_PWR_A, OUTPUT);
+  pinMode(PIN_PWR_B, OUTPUT);
+  pinMode(PIN_START_PULSE, OUTPUT);
+  writePowerPin(PIN_PWR_A, false);
+  writePowerPin(PIN_PWR_B, false);
+  writeStartPulsePin(false);
+  g_sequencePinsConfigured = true;
+}
+
+void releaseSequencePins() {
+  if (!g_sequencePinsConfigured) return;
+  writeStartPulsePin(false);
+  writePowerPin(PIN_PWR_A, false);
+  writePowerPin(PIN_PWR_B, false);
+  digitalWrite(PIN_START_PULSE, LOW);
+  digitalWrite(PIN_PWR_A, LOW);
+  digitalWrite(PIN_PWR_B, LOW);
+  pinMode(PIN_START_PULSE, INPUT);
+  pinMode(PIN_PWR_A, INPUT);
+  pinMode(PIN_PWR_B, INPUT);
+  g_sequencePinsConfigured = false;
+  g_powerAEnabled = false;
+  g_powerBEnabled = false;
+  g_startPulseEnabled = false;
+}
+
+void setStartPulse(bool enabled, bool verbose) {
+  ensureSequencePinsReady();
+  g_startPulseEnabled = enabled;
+  writeStartPulsePin(enabled);
+  if (verbose) {
+    Serial.print(F("[PULSE] D5 -> "));
+    Serial.println(onoff(enabled));
+    emitState(enabled ? F("START_PULSE_ON") : F("START_PULSE_OFF"));
+  }
+}
+
+void runStartPulseSequence(const __FlashStringHelper *tag) {
+  Serial.print(F("[PULSE] "));
+  Serial.print(tag);
+  Serial.print(F(" D5 pulse "));
+  Serial.print(g_powerBootSettleMs);
+  Serial.println(F(" ms"));
+  setStartPulse(true, true);
+  delay(g_powerBootSettleMs);
+  setStartPulse(false, true);
+}
+
 void setStockPowerA(bool enabled, bool verbose) {
+  ensureSequencePinsReady();
   g_powerAEnabled = enabled;
   writePowerPin(PIN_PWR_A, enabled);
   if (verbose) {
@@ -299,6 +493,7 @@ void setStockPowerA(bool enabled, bool verbose) {
 }
 
 void setStockPowerB(bool enabled, bool verbose) {
+  ensureSequencePinsReady();
   g_powerBEnabled = enabled;
   writePowerPin(PIN_PWR_B, enabled);
   if (verbose) {
@@ -311,6 +506,9 @@ void setStockPowerB(bool enabled, bool verbose) {
 void setBothPower(bool enabled, bool verbose) {
   setStockPowerA(enabled, verbose);
   setStockPowerB(enabled, verbose);
+  if (!enabled && g_startPulseEnabled) {
+    setStartPulse(false, verbose);
+  }
 }
 
 // --------------------------- Sensor monitor ---------------------------
@@ -424,6 +622,7 @@ void finishEndurance(bool stopped) {
   g_enduranceStopRequested = false;
   g_enduranceStage = END_IDLE;
   setBothPower(false, true);
+  releaseSequencePins();
 
   Serial.print(F("[END] done pass="));
   Serial.print(g_endurancePass);
@@ -519,20 +718,21 @@ void updateEndurance() {
   switch (g_enduranceStage) {
     case END_POWER_OFF_GUARD:
       if (elapsed >= g_powerOffGuardMs) {
-        setStockPowerA(true, true);
-        enterEnduranceStage(END_POWER_A_DELAY);
+        setBothPower(true, true);
+        enterEnduranceStage(END_POWER_ON_DELAY);
       }
       break;
 
-    case END_POWER_A_DELAY:
+    case END_POWER_ON_DELAY:
       if (elapsed >= g_powerAToBDelayMs) {
-        setStockPowerB(true, true);
-        enterEnduranceStage(END_POWER_BOOT_SETTLE);
+        setStartPulse(true, true);
+        enterEnduranceStage(END_START_PULSE);
       }
       break;
 
-    case END_POWER_BOOT_SETTLE:
+    case END_START_PULSE:
       if (elapsed >= g_powerBootSettleMs) {
+        setStartPulse(false, true);
         if (g_enduranceCheckSensorOn) {
           checkSensorAtCheckpoint(true, F("POWER_ON_CHECK"));
         }
@@ -572,10 +772,9 @@ void runStockStartupSequence(const __FlashStringHelper *tag) {
   Serial.println(F(" start"));
   setBothPower(false, true);
   delay(g_powerOffGuardMs);
-  setStockPowerA(true, true);
+  setBothPower(true, true);
   delay(g_powerAToBDelayMs);
-  setStockPowerB(true, true);
-  delay(g_powerBootSettleMs);
+  runStartPulseSequence(tag);
   syncSensorSnapshot();
   printPowerStatus();
   printSensorStatus();
@@ -614,11 +813,11 @@ void applySetCommand(const String &key, const String &value) {
   const long v = value.toInt();
 
   if (key == "off") {
-    g_powerOffGuardMs = (uint16_t)max(1L, min(60000L, v));
+    g_powerOffGuardMs = (uint16_t)max(0L, min(60000L, v));
   } else if (key == "ab") {
-    g_powerAToBDelayMs = (uint16_t)max(1L, min(60000L, v));
+    g_powerAToBDelayMs = (uint16_t)max(0L, min(60000L, v));
   } else if (key == "bs") {
-    g_powerBootSettleMs = (uint16_t)max(1L, min(60000L, v));
+    g_powerBootSettleMs = (uint16_t)max(0L, min(60000L, v));
   } else if (key == "cw") {
     g_connectWaitMs = (uint16_t)max(0L, min(60000L, v));
   } else if (key == "dw") {
@@ -704,7 +903,7 @@ void handleCommand(const String &lineRaw) {
   }
   if (cmd == "r" || cmd == "status") {
     printSensorStatus();
-    printX9CStatus();
+    printAllX9CStatus();
     printPowerStatus();
     printEnduranceStatus();
     return;
@@ -714,39 +913,22 @@ void handleCommand(const String &lineRaw) {
     return;
   }
 
-  if (cmd == "+") {
-    x9cStep(+1);
-    printX9CStatus();
-    return;
-  }
-  if (cmd == "-") {
-    x9cStep(-1);
-    printX9CStatus();
-    return;
-  }
-  if (cmd == "min") {
-    x9cSetTap(0);
-    printX9CStatus();
-    return;
-  }
-  if (cmd == "max") {
-    x9cSetTap(X9C_MAX_TAP);
-    printX9CStatus();
-    return;
-  }
-  if (cmd == "sweep") {
-    x9cSweepDemo();
-    printX9CStatus();
-    return;
-  }
-  if (cmd.startsWith("s")) {
-    String n = cmd.substring(1);
-    n.trim();
-    if (isUnsignedNumber(n)) {
-      x9cSetTap(n.toInt());
-      printX9CStatus();
+  if (cmd.startsWith("xa ")) {
+    String sub = cmd.substring(3);
+    sub.trim();
+    if (handleX9cModuleCommand(sub, g_x9cModules[0])) {
       return;
     }
+    Serial.print(F("[ERR] unknown X9C A command: "));
+    Serial.println(sub);
+    return;
+  }
+  if (cmd.startsWith("xb ")) {
+    Serial.println(F("[ERR] X9C B is not available in this sequence build"));
+    return;
+  }
+  if (handleX9cAllCommand(cmd)) {
+    return;
   }
 
   if (cmd == "pon") {
@@ -833,24 +1015,14 @@ void setup() {
   pinMode(PIN_SENSOR_A, SENSOR_USE_PULLUP ? INPUT_PULLUP : INPUT);
   pinMode(PIN_SENSOR_B, SENSOR_USE_PULLUP ? INPUT_PULLUP : INPUT);
 
-  pinMode(PIN_X9C_INC, OUTPUT);
-  pinMode(PIN_X9C_UD, OUTPUT);
-  pinMode(PIN_X9C_CS, OUTPUT);
-  digitalWrite(PIN_X9C_INC, HIGH);
-  digitalWrite(PIN_X9C_UD, HIGH);
-  digitalWrite(PIN_X9C_CS, HIGH);
-
-  pinMode(PIN_PWR_A, OUTPUT);
-  pinMode(PIN_PWR_B, OUTPUT);
-  setBothPower(false, false);
+  pinMode(PIN_PWR_A, INPUT);
+  pinMode(PIN_PWR_B, INPUT);
+  pinMode(PIN_START_PULSE, INPUT);
+  digitalWrite(PIN_PWR_A, LOW);
+  digitalWrite(PIN_PWR_B, LOW);
+  digitalWrite(PIN_START_PULSE, LOW);
 
   syncSensorSnapshot();
-
-  if (CALIBRATE_TO_MIN_ON_BOOT) {
-    x9cMoveToMin();
-  } else {
-    g_currentTap = 0;
-  }
 
   emitState(F("MCU_READY"));
   Serial.println(F("[BOOT] UNO endurance automation ready"));
@@ -860,7 +1032,7 @@ void setup() {
   }
 
   printSensorStatus();
-  printX9CStatus();
+  printAllX9CStatus();
   printPowerStatus();
   printConfig();
   printHelp();

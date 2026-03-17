@@ -97,6 +97,8 @@ BATTERY_FULL_V = 4.2
 
 CONNECTION_FAILURE_NOTES = {
     "PROFILE_MISSING": "Connected but the custom BLE service/characteristic was not exposed. Often only 0x1800/0x1801 are visible.",
+    "BLE_ADAPTER_POWERED_OFF": "The PC Bluetooth adapter was powered off, so scanning could not start.",
+    "SCAN_FAILED": "BLE scan itself failed before advertising results were collected.",
     "STATUS_133_GATT_ERROR": "Android/Windows GATT generic failure during connect or service use.",
     "REASON_0X0016": "Disconnect/auth/bond related reason 0x0016 was observed.",
     "API_CLOSE_EVT": "App side or platform side API close event terminated the GATT client.",
@@ -416,6 +418,7 @@ class DualStateCheck(QWidget):
         self._endurance_fail_count = 0
         self._endurance_total_cycles = 0
         self._endurance_done_cycles = 0
+        self._endurance_started_logcat = False
         self._endurance_stock_power: dict[str, Optional[bool]] = {
             "A": None,
             "B": None,
@@ -530,11 +533,6 @@ class DualStateCheck(QWidget):
         ]
         self._startup_wave_done_pairs = {0: False, 1: False}
         self._pair_sync_inflight = {0: False, 1: False}
-        self._dpm_profile: dict[str, dict[str, Optional[float]]] = {
-            "A": {"target_v": None, "pwm": None},
-            "B": {"target_v": None, "pwm": None},
-        }
-
         self._register_entries: list[RegisterEntry] = []
         self._page_index = 0
         self._sequence_events: list[dict] = []
@@ -860,68 +858,97 @@ class DualStateCheck(QWidget):
         endurance_layout.addWidget(self.endurance_disconnect_wait_edit, 1, 1)
 
         endurance_layout.addWidget(QLabel("MCU Off Guard (s)"), 1, 2)
-        self.endurance_mcu_off_guard_edit = QLineEdit("0.3")
+        self.endurance_mcu_off_guard_edit = QLineEdit("0.0")
         self.endurance_mcu_off_guard_edit.setFixedWidth(80)
         endurance_layout.addWidget(self.endurance_mcu_off_guard_edit, 1, 3)
-        endurance_layout.addWidget(QLabel("MCU A->B Delay (s)"), 1, 4)
-        self.endurance_mcu_ab_delay_edit = QLineEdit("0.7")
+        endurance_layout.addWidget(QLabel("MCU PWR->D5 Delay (s)"), 1, 4)
+        self.endurance_mcu_ab_delay_edit = QLineEdit("2.0")
         self.endurance_mcu_ab_delay_edit.setFixedWidth(80)
         endurance_layout.addWidget(self.endurance_mcu_ab_delay_edit, 1, 5)
-        endurance_layout.addWidget(QLabel("MCU Boot Settle (s)"), 1, 6)
-        self.endurance_mcu_boot_settle_edit = QLineEdit("1.5")
+        endurance_layout.addWidget(QLabel("MCU D5 Pulse (s)"), 1, 6)
+        self.endurance_mcu_boot_settle_edit = QLineEdit("2.0")
         self.endurance_mcu_boot_settle_edit.setFixedWidth(80)
         endurance_layout.addWidget(self.endurance_mcu_boot_settle_edit, 1, 7)
 
+        endurance_layout.addWidget(QLabel("MCU Serial"), 2, 0)
+        self.endurance_serial_port_combo = QComboBox()
+        self.endurance_serial_port_combo.addItem(COM_PORT_NONE)
+        endurance_layout.addWidget(self.endurance_serial_port_combo, 2, 1)
+        self.endurance_serial_refresh_button = QPushButton("Refresh")
+        self.endurance_serial_refresh_button.clicked.connect(
+            self._on_endurance_serial_refresh_clicked
+        )
+        endurance_layout.addWidget(self.endurance_serial_refresh_button, 2, 2)
+        endurance_layout.addWidget(QLabel("Baud"), 2, 3)
+        self.endurance_serial_baud_edit = QLineEdit("115200")
+        self.endurance_serial_baud_edit.setFixedWidth(80)
+        endurance_layout.addWidget(self.endurance_serial_baud_edit, 2, 4)
+        self.endurance_serial_start_button = QPushButton("Start MCU Serial")
+        self.endurance_serial_start_button.clicked.connect(
+            self._on_endurance_serial_start_clicked
+        )
+        endurance_layout.addWidget(self.endurance_serial_start_button, 2, 5)
+        self.endurance_serial_stop_button = QPushButton("Stop MCU Serial")
+        self.endurance_serial_stop_button.clicked.connect(
+            self._on_endurance_serial_stop_clicked
+        )
+        self.endurance_serial_stop_button.setEnabled(False)
+        endurance_layout.addWidget(self.endurance_serial_stop_button, 2, 6)
+        self.endurance_serial_status_label = QLabel("IDLE")
+        self.endurance_serial_status_label.setAlignment(Qt.AlignCenter)
+        self._set_label_style(self.endurance_serial_status_label, "#616161", "#ffffff")
+        endurance_layout.addWidget(self.endurance_serial_status_label, 2, 7)
+
         self.endurance_require_register_check = QCheckBox("Require Register Baseline")
         self.endurance_require_register_check.setChecked(True)
-        endurance_layout.addWidget(self.endurance_require_register_check, 2, 0, 1, 2)
-        self.endurance_run_gatt_check = QCheckBox("Run GATT/Battery Each Cycle")
+        endurance_layout.addWidget(self.endurance_require_register_check, 3, 0, 1, 2)
+        self.endurance_run_gatt_check = QCheckBox("Run LED/Blink/Battery Each Cycle")
         self.endurance_run_gatt_check.setChecked(True)
-        endurance_layout.addWidget(self.endurance_run_gatt_check, 2, 2, 1, 2)
+        endurance_layout.addWidget(self.endurance_run_gatt_check, 3, 2, 1, 2)
         self.endurance_ble_only_check = QCheckBox("Force BLE-only Parse")
         self.endurance_ble_only_check.setChecked(True)
-        endurance_layout.addWidget(self.endurance_ble_only_check, 2, 4, 1, 2)
+        endurance_layout.addWidget(self.endurance_ble_only_check, 3, 4, 1, 2)
         self.endurance_stop_on_fail_check = QCheckBox("Stop on First Failure")
         self.endurance_stop_on_fail_check.setChecked(False)
-        endurance_layout.addWidget(self.endurance_stop_on_fail_check, 2, 6, 1, 2)
+        endurance_layout.addWidget(self.endurance_stop_on_fail_check, 3, 6, 1, 2)
         self.endurance_mcu_sensor_on_check = QCheckBox("MCU Sensor ON Check")
         self.endurance_mcu_sensor_on_check.setChecked(True)
-        endurance_layout.addWidget(self.endurance_mcu_sensor_on_check, 3, 0, 1, 2)
+        endurance_layout.addWidget(self.endurance_mcu_sensor_on_check, 4, 0, 1, 2)
         self.endurance_mcu_sensor_off_check = QCheckBox("MCU Sensor OFF Check")
         self.endurance_mcu_sensor_off_check.setChecked(True)
-        endurance_layout.addWidget(self.endurance_mcu_sensor_off_check, 3, 2, 1, 2)
+        endurance_layout.addWidget(self.endurance_mcu_sensor_off_check, 4, 2, 1, 2)
         self.endurance_mcu_note_label = QLabel(
-            "MCU mode uses Sequence tab Serial Port/Baud and runs only the selected A/B pair."
+            "MCU mode: D6+D7 ON -> wait -> D5 pulse -> BLE test -> power OFF interval, using the selected pair only."
         )
         self.endurance_mcu_note_label.setStyleSheet("color:#bdbdbd;")
-        endurance_layout.addWidget(self.endurance_mcu_note_label, 3, 4, 1, 4)
+        endurance_layout.addWidget(self.endurance_mcu_note_label, 4, 4, 1, 4)
 
         self.endurance_start_100_button = QPushButton("Start 100 Cycles")
         self.endurance_start_100_button.clicked.connect(
             lambda: self._start_endurance(100)
         )
-        endurance_layout.addWidget(self.endurance_start_100_button, 4, 0, 1, 2)
+        endurance_layout.addWidget(self.endurance_start_100_button, 5, 0, 1, 2)
         self.endurance_start_custom_button = QPushButton("Start Custom")
         self.endurance_start_custom_button.clicked.connect(
             lambda: self._start_endurance()
         )
-        endurance_layout.addWidget(self.endurance_start_custom_button, 4, 2, 1, 2)
+        endurance_layout.addWidget(self.endurance_start_custom_button, 5, 2, 1, 2)
         self.endurance_stop_button = QPushButton("Stop")
         self.endurance_stop_button.clicked.connect(self._stop_endurance)
         self.endurance_stop_button.setEnabled(False)
-        endurance_layout.addWidget(self.endurance_stop_button, 4, 4, 1, 2)
+        endurance_layout.addWidget(self.endurance_stop_button, 5, 4, 1, 2)
         self.endurance_copy_report_button = QPushButton("Copy Report Path")
         self.endurance_copy_report_button.clicked.connect(self._copy_endurance_report_path)
         self.endurance_copy_report_button.setEnabled(False)
-        endurance_layout.addWidget(self.endurance_copy_report_button, 4, 6, 1, 2)
+        endurance_layout.addWidget(self.endurance_copy_report_button, 5, 6, 1, 2)
 
         self.endurance_status_label = QLabel("IDLE")
-        endurance_layout.addWidget(self.endurance_status_label, 5, 0, 1, 2)
+        endurance_layout.addWidget(self.endurance_status_label, 6, 0, 1, 2)
         self.endurance_progress_label = QLabel("Cycle: 0/0")
-        endurance_layout.addWidget(self.endurance_progress_label, 5, 2, 1, 2)
+        endurance_layout.addWidget(self.endurance_progress_label, 6, 2, 1, 2)
         self.endurance_report_label = QLabel("Report: --")
         self.endurance_report_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        endurance_layout.addWidget(self.endurance_report_label, 5, 4, 1, 4)
+        endurance_layout.addWidget(self.endurance_report_label, 6, 4, 1, 4)
 
         endurance_group.setLayout(endurance_layout)
         layout.addWidget(endurance_group)
@@ -3255,7 +3282,6 @@ class DualStateCheck(QWidget):
             side_layout = QVBoxLayout()
             acdc_label = QLabel("AC / DC")
             arrow1 = QLabel("↓")
-            dpm_label = QLabel("DPM + Regulator")
             arrow2 = QLabel("↓")
             mcu_label = QLabel("MCU: DISCONNECT")
             arrow3 = QLabel("↓")
@@ -3267,7 +3293,6 @@ class DualStateCheck(QWidget):
             for label in (
                 acdc_label,
                 arrow1,
-                dpm_label,
                 arrow2,
                 mcu_label,
                 arrow3,
@@ -3278,7 +3303,7 @@ class DualStateCheck(QWidget):
                 off_label,
             ):
                 label.setAlignment(Qt.AlignCenter)
-            for label in (acdc_label, dpm_label, mcu_label, stock_title, stock_state):
+            for label in (acdc_label, mcu_label, stock_title, stock_state):
                 label.setMinimumHeight(32)
             for label in (on_label, off_label):
                 label.setMinimumHeight(30)
@@ -3287,7 +3312,6 @@ class DualStateCheck(QWidget):
                 arrow.setMinimumHeight(20)
                 arrow.setStyleSheet("font-size: 18px; color: #90a4ae;")
             self._set_label_style(acdc_label, "#37474f", "#FFFFFF")
-            self._set_label_style(dpm_label, "#6a1b9a", "#FFFFFF")
             self._set_label_style(mcu_label, "#455a64", "#FFFFFF")
             self._set_label_style(stock_title, "#263238", "#FFFFFF")
             self._set_label_style(stock_state, "#424242", "#FFFFFF")
@@ -3296,7 +3320,6 @@ class DualStateCheck(QWidget):
             or_label.setStyleSheet("color: #b0bec5;")
             side_layout.addWidget(acdc_label)
             side_layout.addWidget(arrow1)
-            side_layout.addWidget(dpm_label)
             side_layout.addWidget(arrow2)
             side_layout.addWidget(mcu_label)
             side_layout.addWidget(arrow3)
@@ -3308,7 +3331,6 @@ class DualStateCheck(QWidget):
             side_group.setLayout(side_layout)
             flow_grid.addWidget(side_group, 0, col * 2)
             self.endurance_diagram_labels[side] = {
-                "dpm": dpm_label,
                 "mcu": mcu_label,
                 "stock": stock_state,
             }
@@ -3340,32 +3362,6 @@ class DualStateCheck(QWidget):
         flow_grid.setColumnStretch(2, 3)
         diagram_layout.addLayout(flow_grid)
 
-        dpm_group = QGroupBox("DPM Scenario (Pseudo Battery Marker)")
-        dpm_layout = QGridLayout()
-        dpm_layout.addWidget(QLabel("A target (V)"), 0, 0)
-        self.dpm_a_voltage_edit = QLineEdit("4.00")
-        self.dpm_a_voltage_edit.setFixedWidth(80)
-        dpm_layout.addWidget(self.dpm_a_voltage_edit, 0, 1)
-        dpm_layout.addWidget(QLabel("A PWM (%)"), 0, 2)
-        self.dpm_a_pwm_edit = QLineEdit("50")
-        self.dpm_a_pwm_edit.setFixedWidth(80)
-        dpm_layout.addWidget(self.dpm_a_pwm_edit, 0, 3)
-        dpm_layout.addWidget(QLabel("B target (V)"), 0, 4)
-        self.dpm_b_voltage_edit = QLineEdit("4.00")
-        self.dpm_b_voltage_edit.setFixedWidth(80)
-        dpm_layout.addWidget(self.dpm_b_voltage_edit, 0, 5)
-        dpm_layout.addWidget(QLabel("B PWM (%)"), 0, 6)
-        self.dpm_b_pwm_edit = QLineEdit("50")
-        self.dpm_b_pwm_edit.setFixedWidth(80)
-        dpm_layout.addWidget(self.dpm_b_pwm_edit, 0, 7)
-        self.dpm_apply_button = QPushButton("Apply + Log Marker")
-        self.dpm_apply_button.clicked.connect(self._apply_dpm_profile)
-        dpm_layout.addWidget(self.dpm_apply_button, 0, 8)
-        self.dpm_status_label = QLabel("DPM marker: not set")
-        dpm_layout.addWidget(self.dpm_status_label, 1, 0, 1, 9)
-        dpm_group.setLayout(dpm_layout)
-        diagram_layout.addWidget(dpm_group)
-
         display_group = QGroupBox("Display Content (Test Summary)")
         display_layout = QVBoxLayout()
         self.endurance_display_view = QPlainTextEdit()
@@ -3392,13 +3388,11 @@ class DualStateCheck(QWidget):
             android_label = QLabel("Android: UNKNOWN")
             output_label = QLabel("LED: UNKNOWN")
             battery_label = QLabel("Battery: --.- V")
-            dpm_label = QLabel("DPM: -- V / -- PWM")
             for label in (
                 conn_label,
                 android_label,
                 output_label,
                 battery_label,
-                dpm_label,
             ):
                 label.setAlignment(Qt.AlignCenter)
                 self._set_label_style(label, "#424242", "#FFFFFF")
@@ -3411,7 +3405,6 @@ class DualStateCheck(QWidget):
                 "android": android_label,
                 "output": output_label,
                 "battery": battery_label,
-                "dpm": dpm_label,
             }
             card_grid.addWidget(slot_group, index // 2, index % 2)
         details_layout.addLayout(card_grid)
@@ -3974,8 +3967,7 @@ class DualStateCheck(QWidget):
             ("Endurance", "Validate register baseline", "N/pair + register entries"),
             ("Endurance", "Record REGISTER_BASELINE_OK / REGISTER_PAIR", "Baseline trace"),
             ("Endurance", "CYCLE_START i/N", "Cycle marker"),
-            ("Endurance", "Optional DPM_MARKER", "Pseudo battery profile"),
-            ("Endurance", "Scan -> Connect -> GATT/Battery -> Disconnect", "One cycle flow"),
+            ("Endurance", "Power ON -> Connect -> LED blink/on -> Battery read", "One cycle BLE test flow"),
             ("Endurance", "CYCLE_END + classify", "PASS/FAIL + failure class"),
             ("Endurance", "Stop on fail (optional)", "Break on first fail"),
             ("Endurance", "Export endurance_report + summary", "Auto output CSV"),
@@ -5062,16 +5054,66 @@ class DualStateCheck(QWidget):
                 return self._adb_path_guess
         return None
 
-    def _start_logcat(self) -> None:
+    def _adb_logcat_ready(self, adb_path: str) -> tuple[bool, str]:
+        try:
+            completed = subprocess.run(
+                [adb_path, "devices"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+            )
+        except Exception as exc:
+            return False, f"adb devices failed: {exc}"
+        device_found = False
+        unauthorized_found = False
+        offline_found = False
+        for line in completed.stdout.splitlines()[1:]:
+            text = line.strip()
+            if not text or text.startswith("*"):
+                continue
+            parts = text.split()
+            if len(parts) < 2:
+                continue
+            state = parts[1].lower()
+            if state == "device":
+                device_found = True
+            elif state == "unauthorized":
+                unauthorized_found = True
+            elif state == "offline":
+                offline_found = True
+        if device_found:
+            return True, ""
+        if unauthorized_found:
+            return (
+                False,
+                "Android device is unauthorized for adb. Accept the USB debugging dialog on the phone first.",
+            )
+        if offline_found:
+            return (
+                False,
+                "Android device is offline for adb. Reconnect USB or restart adb, then try again.",
+            )
+        stderr = completed.stderr.strip()
+        if stderr:
+            return False, f"adb devices failed: {stderr}"
+        return False, "No authorized Android device found for adb logcat"
+
+    def _start_logcat(self, _checked: bool = False, *, start_sequence_csv: bool = True) -> bool:
         if self._logcat_worker and self._logcat_worker.isRunning():
-            return
+            return True
         adb_path_input = self.adb_path_edit.text()
         adb_path = self._resolve_adb_path(adb_path_input)
         if not adb_path:
             self._show_error(
                 "adb not found. Set full path (e.g. C:\\Users\\user\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe)"
             )
-            return
+            return False
+        ready, reason = self._adb_logcat_ready(adb_path)
+        if not ready:
+            self._show_error(reason)
+            return False
         try:
             subprocess.run(
                 [adb_path, "logcat", "-c"],
@@ -5083,7 +5125,8 @@ class DualStateCheck(QWidget):
             )
         except Exception as exc:
             self.log(f"[SEQ] adb logcat -c skipped: {exc}")
-        self._start_active_sequence_csv("logcat")
+        if start_sequence_csv:
+            self._start_active_sequence_csv("logcat")
         filter_text = self.logcat_filter_edit.text().strip()
         self._logcat_worker = LogcatWorker(adb_path, filter_text)
         self._logcat_worker.line_ready.connect(
@@ -5097,6 +5140,7 @@ class DualStateCheck(QWidget):
         self.logcat_status.setText("RUNNING")
         self.logcat_start_button.setEnabled(False)
         self.logcat_stop_button.setEnabled(True)
+        return True
 
     def _stop_logcat(self) -> None:
         if self._logcat_worker:
@@ -5110,15 +5154,18 @@ class DualStateCheck(QWidget):
 
     def _start_serial(self) -> bool:
         if self._serial_worker and self._serial_worker.isRunning():
+            self._refresh_endurance_serial_controls()
             return True
         port = self.serial_port_combo.currentText().strip()
         if self._is_unconnected_port(port):
             self._show_error("Select a serial port")
+            self._refresh_endurance_serial_controls()
             return False
         try:
             baud = int(self.serial_baud_edit.text().strip())
         except ValueError:
             self._show_error("Invalid baud rate")
+            self._refresh_endurance_serial_controls()
             return False
         self._start_active_sequence_csv("serial")
         self._serial_worker = SerialWorker(port, baud)
@@ -5133,6 +5180,7 @@ class DualStateCheck(QWidget):
         self.serial_status.setText("RUNNING")
         self.serial_start_button.setEnabled(False)
         self.serial_stop_button.setEnabled(True)
+        self._refresh_endurance_serial_controls()
         return True
 
     def _stop_serial(self) -> None:
@@ -5144,12 +5192,19 @@ class DualStateCheck(QWidget):
         self.serial_status.setText("IDLE")
         self.serial_start_button.setEnabled(True)
         self.serial_stop_button.setEnabled(False)
+        self._refresh_endurance_serial_controls()
 
     def _refresh_monitor_ports(self) -> None:
         ports = self._list_ports()
-        combo = self.serial_port_combo
-        current = combo.currentText()
-        self._fill_port_combo(combo, ports, current)
+        if hasattr(self, "serial_port_combo"):
+            combo = self.serial_port_combo
+            current = combo.currentText()
+            self._fill_port_combo(combo, ports, current)
+        if hasattr(self, "endurance_serial_port_combo"):
+            combo = self.endurance_serial_port_combo
+            current = combo.currentText()
+            self._fill_port_combo(combo, ports, current)
+        self._refresh_endurance_serial_controls()
 
     # --------------------------- RSSI Monitor ---------------------------
     async def _start_rssi_monitor(self) -> None:
@@ -5317,7 +5372,11 @@ class DualStateCheck(QWidget):
             except Exception as exc:
                 self.log(f"[ERROR] Scan failed: {exc}")
                 self.scan_button.setEnabled(True)
-                self._record_sequence("SCAN_FAIL")
+                detail = type(exc).__name__.upper()
+                text = str(exc).lower()
+                if "powered on" in text or "powered_off" in text or "powered off" in text:
+                    detail = "POWERED_OFF"
+                self._record_sequence(f"SCAN_FAIL {detail}")
                 return
 
             self._device_map.clear()
@@ -5886,6 +5945,39 @@ class DualStateCheck(QWidget):
         self._update_collision_status()
         return all_battery_ok
 
+    def _estimate_endurance_ble_check_s(self) -> float:
+        blink_s = max(0.2, self._startup_wave_cycle_ms / 1000.0) * max(
+            1, len(self._startup_wave_colors)
+        )
+        led_on_s = 0.8
+        battery_s = 1.2
+        margin_s = 2.0
+        return blink_s + led_on_s + battery_s + margin_s
+
+    async def _run_endurance_ble_checks_slots(self, slots: list[str]) -> bool:
+        if not self._all_slots_connected(slots):
+            return False
+        cycle_s = max(0.2, self._startup_wave_cycle_ms / 1000.0)
+        self._record_sequence("BLE_TEST_BEGIN", "TOOL")
+        blink_ok = await self._run_startup_wave_slots(
+            slots,
+            repeat_count=len(self._startup_wave_colors),
+            cycle_seconds=cycle_s,
+            color_sequence=[QColor(color) for color in self._startup_wave_colors],
+        )
+        led_results = await asyncio.gather(*[self._led_test(slot) for slot in slots])
+        battery_results = await asyncio.gather(
+            *[self._read_battery(slot) for slot in slots]
+        )
+        all_ok = blink_ok and all(led_results) and all(battery_results)
+        self._update_collision_status()
+        self._record_sequence(
+            "BLE_TEST_END "
+            f"blink={int(blink_ok)} led={int(all(led_results))} battery={int(all(battery_results))}",
+            "TOOL",
+        )
+        return all_ok
+
     async def _gatt_test_all(self) -> None:
         for slot in self._slots:
             client = self._clients.get(slot)
@@ -6077,10 +6169,10 @@ class DualStateCheck(QWidget):
         )
         return all_ok
 
-    async def _led_test(self, slot: str) -> None:
+    async def _led_test(self, slot: str) -> bool:
         client = self._clients.get(slot)
         if not client or not client.is_connected:
-            return
+            return False
         self.log(f"[GATT] {slot} LED test start")
         try:
             await self._write_led_command(slot, [CMD_SET_OUTPUT_ENABLE, 0x01])
@@ -6101,9 +6193,10 @@ class DualStateCheck(QWidget):
             await asyncio.sleep(0.2)
         except Exception as exc:
             self.log(f"[WARN] {slot} LED test failed: {exc}")
-            return
+            return False
         self._record_sequence("LED_TEST", slot)
         self.log(f"[GATT] {slot} LED test done")
+        return True
 
     def _is_auth_error(self, exc: Exception) -> bool:
         text = str(exc).lower()
@@ -6799,12 +6892,18 @@ class DualStateCheck(QWidget):
         if hasattr(self, "serial_port_combo"):
             serial_current = self.serial_port_combo.currentText()
             self._fill_port_combo(self.serial_port_combo, ports, serial_current)
+        if hasattr(self, "endurance_serial_port_combo"):
+            endurance_serial_current = self.endurance_serial_port_combo.currentText()
+            self._fill_port_combo(
+                self.endurance_serial_port_combo, ports, endurance_serial_current
+            )
         if hasattr(self, "serial_color_port_combo"):
             serial_color_current = self.serial_color_port_combo.currentText()
             self._fill_port_combo(
                 self.serial_color_port_combo, ports, serial_color_current
             )
         self._apply_pair2_no_connection_guard_ui()
+        self._refresh_endurance_serial_controls()
         if ports:
             self.log(f"[COM] refreshed all tabs: {', '.join(ports)}")
         else:
@@ -7219,23 +7318,6 @@ class DualStateCheck(QWidget):
                 self._set_label_style(label, "#333333", "#aaaaaa")
         self._refresh_endurance_visual_slot(slot)
 
-    def _apply_dpm_profile(self) -> None:
-        try:
-            a_v = float(self.dpm_a_voltage_edit.text().strip())
-            a_pwm = float(self.dpm_a_pwm_edit.text().strip())
-            b_v = float(self.dpm_b_voltage_edit.text().strip())
-            b_pwm = float(self.dpm_b_pwm_edit.text().strip())
-        except ValueError:
-            self._show_error("DPM values must be numeric")
-            return
-        self._dpm_profile["A"] = {"target_v": a_v, "pwm": a_pwm}
-        self._dpm_profile["B"] = {"target_v": b_v, "pwm": b_pwm}
-        marker = f"DPM_PROFILE A={a_v:.2f}V/{a_pwm:.1f}% B={b_v:.2f}V/{b_pwm:.1f}%"
-        self.dpm_status_label.setText(f"DPM marker: {marker}")
-        self._record_sequence(marker, "TOOL")
-        self.log(f"[DPM] {marker}")
-        self._refresh_endurance_visual_all()
-
     def _refresh_endurance_visual_all(self) -> None:
         if not hasattr(self, "endurance_visual_slots"):
             return
@@ -7297,17 +7379,6 @@ class DualStateCheck(QWidget):
             batt_color = self._battery_color(voltage)
             widgets["battery"].setText(f"Battery: {voltage:.2f} V")
             self._set_label_style(widgets["battery"], batt_color, "#FFFFFF")
-
-        side = "A" if slot.startswith("A") else "B"
-        profile = self._dpm_profile.get(side, {})
-        target_v = profile.get("target_v")
-        pwm = profile.get("pwm")
-        if target_v is None or pwm is None:
-            widgets["dpm"].setText("DPM: -- V / -- PWM")
-            self._set_label_style(widgets["dpm"], "#616161", "#FFFFFF")
-        else:
-            widgets["dpm"].setText(f"DPM: {target_v:.2f} V / {pwm:.1f}%")
-            self._set_label_style(widgets["dpm"], "#6a1b9a", "#FFFFFF")
         self._refresh_endurance_diagram()
 
     def _refresh_endurance_diagram(self) -> None:
@@ -7398,17 +7469,6 @@ class DualStateCheck(QWidget):
                     volt_label.setText(f"Battery: {voltage:.2f} V")
                     self._set_label_style(volt_label, batt_bg, "#FFFFFF")
 
-            profile = self._dpm_profile.get(side, {})
-            dpm_label = labels.get("dpm")
-            if dpm_label:
-                target_v = profile.get("target_v")
-                pwm = profile.get("pwm")
-                if target_v is None or pwm is None:
-                    dpm_label.setText("DPM + Regulator")
-                    self._set_label_style(dpm_label, "#6a1b9a", "#FFFFFF")
-                else:
-                    dpm_label.setText(f"DPM: {target_v:.2f} V / {pwm:.1f}%")
-                    self._set_label_style(dpm_label, "#6a1b9a", "#FFFFFF")
             center_label = (
                 self.endurance_stock_center_a
                 if side == "A"
@@ -7627,13 +7687,14 @@ class DualStateCheck(QWidget):
                 widget.setEnabled(is_mcu)
         if hasattr(self, "endurance_mcu_note_label"):
             note = (
-                "MCU mode uses Sequence tab Serial Port/Baud and runs only the selected A/B pair."
+                "MCU mode can use the serial controls here or in Sequence tab. LED blink/on/battery tests run on the selected A/B pair."
                 if is_mcu
                 else "PC mode uses the existing BLE connect/disconnect loop for all selected pairs."
             )
             self.endurance_mcu_note_label.setText(note)
         if hasattr(self, "endurance_run_gatt_check"):
             self.endurance_run_gatt_check.setEnabled(True)
+        self._refresh_endurance_serial_controls()
         self._refresh_endurance_visual_summary()
 
     def _parse_endurance_mcu_config(self) -> Optional[dict[str, object]]:
@@ -7660,6 +7721,71 @@ class DualStateCheck(QWidget):
         if pair_index < 0 or pair_index >= len(self._pairs):
             return []
         return list(self._pairs[pair_index])
+
+    def _apply_endurance_serial_settings_to_monitor(self) -> None:
+        if not hasattr(self, "endurance_serial_port_combo"):
+            return
+        port = self.endurance_serial_port_combo.currentText().strip()
+        baud = self.endurance_serial_baud_edit.text().strip()
+        if hasattr(self, "serial_port_combo"):
+            self.serial_port_combo.setCurrentText(port if port else COM_PORT_NONE)
+        if hasattr(self, "serial_baud_edit") and baud:
+            self.serial_baud_edit.setText(baud)
+
+    def _refresh_endurance_serial_controls(self) -> None:
+        if not hasattr(self, "endurance_serial_status_label"):
+            return
+        running = bool(self._serial_worker and self._serial_worker.isRunning())
+        port = ""
+        if hasattr(self, "serial_port_combo"):
+            port = self.serial_port_combo.currentText().strip()
+        if hasattr(self, "serial_baud_edit") and hasattr(self, "endurance_serial_baud_edit"):
+            baud_text = self.serial_baud_edit.text().strip()
+            current_baud = self.endurance_serial_baud_edit.text().strip()
+            if baud_text and (running or not current_baud) and current_baud != baud_text:
+                self.endurance_serial_baud_edit.setText(baud_text)
+        if (
+            hasattr(self, "serial_port_combo")
+            and hasattr(self, "endurance_serial_port_combo")
+            and not self.endurance_serial_port_combo.hasFocus()
+        ):
+            current = self.endurance_serial_port_combo.currentText().strip()
+            target = port if port else COM_PORT_NONE
+            if target and (
+                running
+                or (
+                    self._is_unconnected_port(current)
+                    and not self._is_unconnected_port(target)
+                )
+            ) and current != target:
+                self.endurance_serial_port_combo.setCurrentText(target)
+        status_text = "RUNNING"
+        status_bg = "#2e7d32"
+        if running and port and not self._is_unconnected_port(port):
+            status_text = f"RUNNING ({port})"
+        elif not running:
+            status_text = "IDLE"
+            status_bg = "#616161"
+        self.endurance_serial_status_label.setText(status_text)
+        self._set_label_style(self.endurance_serial_status_label, status_bg, "#ffffff")
+        if hasattr(self, "endurance_serial_start_button"):
+            self.endurance_serial_start_button.setEnabled(
+                self._is_endurance_mcu_mode() and not running
+            )
+        if hasattr(self, "endurance_serial_stop_button"):
+            self.endurance_serial_stop_button.setEnabled(
+                self._is_endurance_mcu_mode() and running
+            )
+
+    def _on_endurance_serial_refresh_clicked(self) -> None:
+        self._refresh_monitor_ports()
+
+    def _on_endurance_serial_start_clicked(self) -> None:
+        self._apply_endurance_serial_settings_to_monitor()
+        self._start_serial()
+
+    def _on_endurance_serial_stop_clicked(self) -> None:
+        self._stop_serial()
 
     def _serial_send_line(self, line: str) -> bool:
         worker = self._serial_worker
@@ -7728,7 +7854,9 @@ class DualStateCheck(QWidget):
         )
 
     async def _ensure_mcu_serial_ready(self) -> bool:
+        self._apply_endurance_serial_settings_to_monitor()
         if self._serial_worker and self._serial_worker.isRunning():
+            self._refresh_endurance_serial_controls()
             return True
         self._clear_mcu_state_history()
         if not self._start_serial():
@@ -7741,6 +7869,17 @@ class DualStateCheck(QWidget):
         if ready is None:
             self.log("[ENDURANCE][MCU] MCU_READY timeout after serial start")
             return False
+        await asyncio.sleep(0.2)
+        return True
+
+    async def _ensure_endurance_logcat_running(self) -> bool:
+        if hasattr(self, "android_add_sequence_check"):
+            self.android_add_sequence_check.setChecked(True)
+        if self._logcat_worker and self._logcat_worker.isRunning():
+            return True
+        if not self._start_logcat(start_sequence_csv=False):
+            return False
+        self._endurance_started_logcat = True
         await asyncio.sleep(0.2)
         return True
 
@@ -7789,6 +7928,7 @@ class DualStateCheck(QWidget):
         if connect_wait < 0 or disconnect_wait < 0:
             self._show_error("Wait time must be >= 0")
             return
+        self._endurance_started_logcat = False
         self._endurance_stop_requested = False
         self._endurance_task = asyncio.create_task(
             self._run_endurance_loop(fixed_cycles, connect_wait, disconnect_wait)
@@ -7809,6 +7949,9 @@ class DualStateCheck(QWidget):
         self._set_endurance_running(False)
         self._endurance_task = None
         self._endurance_active_cycle = None
+        if self._endurance_started_logcat:
+            self._stop_logcat()
+            self._endurance_started_logcat = False
         if task.cancelled():
             self.endurance_status_label.setText("STOPPED")
             self._refresh_endurance_visual_summary()
@@ -7883,6 +8026,9 @@ class DualStateCheck(QWidget):
         if self.endurance_ble_only_check.isChecked():
             self.android_ble_only_check.setChecked(True)
             self.android_add_sequence_check.setChecked(True)
+        if not await self._ensure_endurance_logcat_running():
+            self.endurance_status_label.setText("FAILED")
+            return
 
         if self.auto_test_check.isChecked():
             self.auto_test_check.setChecked(False)
@@ -7974,6 +8120,9 @@ class DualStateCheck(QWidget):
         if self.endurance_ble_only_check.isChecked():
             self.android_ble_only_check.setChecked(True)
             self.android_add_sequence_check.setChecked(True)
+        if not await self._ensure_endurance_logcat_running():
+            self.endurance_status_label.setText("FAILED")
+            return
 
         if self.auto_test_check.isChecked():
             self.auto_test_check.setChecked(False)
@@ -7989,11 +8138,23 @@ class DualStateCheck(QWidget):
 
         await self._disconnect_both(reason="endurance-mcu-prep")
 
+        mcu_connect_window_s = connect_wait_s
+        if self.endurance_run_gatt_check.isChecked():
+            mcu_connect_window_s = max(
+                connect_wait_s, self._estimate_endurance_ble_check_s()
+            )
+            if mcu_connect_window_s > connect_wait_s + 0.05:
+                self.log(
+                    "[ENDURANCE][MCU] connect window extended "
+                    f"{connect_wait_s:.1f}s -> {mcu_connect_window_s:.1f}s "
+                    "for LED blink/on and battery checks"
+                )
+
         config_commands = [
             (f"set off {int(mcu_config['off_guard_ms'])}", "off"),
             (f"set ab {int(mcu_config['ab_delay_ms'])}", "ab"),
             (f"set bs {int(mcu_config['boot_settle_ms'])}", "bs"),
-            (f"set cw {max(0, int(round(connect_wait_s * 1000.0)))}", "cw"),
+            (f"set cw {max(0, int(round(mcu_connect_window_s * 1000.0)))}", "cw"),
             (f"set dw {max(0, int(round(disconnect_wait_s * 1000.0)))}", "dw"),
             (f"set son {1 if mcu_config['sensor_on'] else 0}", "son"),
             (f"set sof {1 if mcu_config['sensor_off'] else 0}", "sof"),
@@ -8021,7 +8182,7 @@ class DualStateCheck(QWidget):
                 return
 
         start_event = await self._send_mcu_command_wait(
-            f"run {cycles} {max(0, int(round(connect_wait_s * 1000.0)))} "
+            f"run {cycles} {max(0, int(round(mcu_connect_window_s * 1000.0)))} "
             f"{max(0, int(round(disconnect_wait_s * 1000.0)))}",
             "ENDURANCE_START",
             timeout_s=3.0,
@@ -8162,21 +8323,6 @@ class DualStateCheck(QWidget):
         t0 = time.perf_counter()
         self._endurance_active_cycle = cycle
 
-        dpm_a = self._dpm_profile.get("A", {})
-        dpm_b = self._dpm_profile.get("B", {})
-        if (
-            dpm_a.get("target_v") is not None
-            and dpm_a.get("pwm") is not None
-            and dpm_b.get("target_v") is not None
-            and dpm_b.get("pwm") is not None
-        ):
-            self._record_sequence(
-                "DPM_MARKER "
-                f"A={dpm_a.get('target_v'):.2f}V/{dpm_a.get('pwm'):.1f}% "
-                f"B={dpm_b.get('target_v'):.2f}V/{dpm_b.get('pwm'):.1f}%",
-                "TOOL",
-            )
-
         t_scan = t0
         t_connect = t0
         t_gatt = t0
@@ -8275,18 +8421,16 @@ class DualStateCheck(QWidget):
         if scan_ok:
             connect_ok = await self._connect_endurance_slots(pair_index, target_slots)
         t_connect = time.perf_counter()
-        if connect_ok and connect_wait_s > 0:
-            await asyncio.sleep(connect_wait_s)
+        if connect_ok:
+            # In MCU mode, connect_wait_s already defines the MCU-side connect window.
+            # Start BLE checks immediately after connect so the window is not consumed here.
+            await asyncio.sleep(0.2)
 
         if connect_ok:
-            startup_ok = await self._run_startup_wave_slots(
-                target_slots,
-                repeat_count=len(self._startup_wave_colors),
-                cycle_seconds=1.0,
-            )
-            gatt_ok = startup_ok and await self._after_connected_slots(target_slots)
             if self.endurance_run_gatt_check.isChecked():
-                await self._gatt_test_slots(target_slots)
+                gatt_ok = await self._run_endurance_ble_checks_slots(target_slots)
+            else:
+                gatt_ok = await self._after_connected_slots(target_slots)
         t_gatt = time.perf_counter()
 
         await self._disconnect_both(reason=f"endurance-mcu-cycle-{cycle}")
@@ -8394,21 +8538,6 @@ class DualStateCheck(QWidget):
         t0 = time.perf_counter()
         self._endurance_active_cycle = cycle
         self._record_sequence(f"CYCLE_START {cycle}/{total_cycles}", "TOOL")
-        dpm_a = self._dpm_profile.get("A", {})
-        dpm_b = self._dpm_profile.get("B", {})
-        if (
-            dpm_a.get("target_v") is not None
-            and dpm_a.get("pwm") is not None
-            and dpm_b.get("target_v") is not None
-            and dpm_b.get("pwm") is not None
-        ):
-            self._record_sequence(
-                "DPM_MARKER "
-                f"A={dpm_a.get('target_v'):.2f}V/{dpm_a.get('pwm'):.1f}% "
-                f"B={dpm_b.get('target_v'):.2f}V/{dpm_b.get('pwm'):.1f}%",
-                "TOOL",
-            )
-
         await self._scan_devices()
         t_scan = time.perf_counter()
         scan_ok = self._all_selected_names_discovered()
@@ -8422,12 +8551,10 @@ class DualStateCheck(QWidget):
 
         gatt_ok = False
         if connect_ok:
-            startup_ok = await self._run_startup_wave_all(
-                repeat_count=len(self._startup_wave_colors), cycle_seconds=1.0
-            )
-            gatt_ok = startup_ok and await self._after_both_connected()
             if self.endurance_run_gatt_check.isChecked():
-                await self._gatt_test_all()
+                gatt_ok = await self._run_endurance_ble_checks_slots(self._slots)
+            else:
+                gatt_ok = await self._after_both_connected()
         t_gatt = time.perf_counter()
 
         disconnect_ok = await self._disconnect_both()
@@ -8522,6 +8649,10 @@ class DualStateCheck(QWidget):
         disconnect_ok: bool,
     ) -> tuple[str, str]:
         all_text = " ".join(str(entry.get("event", "")) for entry in entries).lower()
+        if "scan_fail powered_off" in all_text:
+            return "BLE_ADAPTER_POWERED_OFF", CONNECTION_FAILURE_NOTES["BLE_ADAPTER_POWERED_OFF"]
+        if "scan_fail" in all_text:
+            return "SCAN_FAILED", CONNECTION_FAILURE_NOTES["SCAN_FAILED"]
         flat_cycle_ids: set[str] = set()
         for entry in entries:
             text = str(entry.get("event", "")).lower()
@@ -8586,7 +8717,7 @@ class DualStateCheck(QWidget):
         if not connect_ok:
             return "CONNECT_FAILED", "connect timeout or connect rejected"
         if not gatt_ok:
-            return "GATT_TIMEOUT_OR_READ_FAIL", "gatt battery/read stage failed"
+            return "GATT_TIMEOUT_OR_READ_FAIL", "led/blink/battery stage failed"
         if not disconnect_ok:
             return "DISCONNECT_INCOMPLETE", "disconnect incomplete"
         return "OTHER", "unclassified"

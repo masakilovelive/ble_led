@@ -345,7 +345,11 @@ class StockController extends StateNotifier<StockState> {
     await readBattery(StockSide.b);
   }
 
-  Future<String?> verifyGattProfile(StockSide side) async {
+  Future<String?> verifyGattProfile(
+    StockSide side, {
+    bool requireBatteryCharacteristic = true,
+    bool requireAckCharacteristic = false,
+  }) async {
     final device = _sideState(side).device;
     if (device == null) {
       return 'Device ${side.name.toUpperCase()} not assigned';
@@ -363,12 +367,6 @@ class StockController extends StateNotifier<StockState> {
             .toSet();
       }
 
-      final alertChars = serviceMap[Env.serviceUuid.toLowerCase()];
-      if (alertChars == null ||
-          !alertChars.contains(Env.alertLevelUuid.toLowerCase())) {
-        return 'Missing alert level characteristic on ${side.name.toUpperCase()}';
-      }
-
       final advChars = serviceMap[Env.advServiceUuid.toLowerCase()];
       if (advChars == null) {
         return 'Missing ADV service on ${side.name.toUpperCase()}';
@@ -376,8 +374,13 @@ class StockController extends StateNotifier<StockState> {
       if (!advChars.contains(Env.advCharUuid.toLowerCase())) {
         return 'Missing ADV command characteristic on ${side.name.toUpperCase()}';
       }
-      if (!advChars.contains(Env.voltageCharUuid.toLowerCase())) {
+      if (requireBatteryCharacteristic &&
+          !advChars.contains(Env.voltageCharUuid.toLowerCase())) {
         return 'Missing voltage characteristic on ${side.name.toUpperCase()}';
+      }
+      if (requireAckCharacteristic &&
+          !advChars.contains(Env.ackCharUuid.toLowerCase())) {
+        return 'Missing ACK characteristic on ${side.name.toUpperCase()}';
       }
       return null;
     } catch (e, st) {

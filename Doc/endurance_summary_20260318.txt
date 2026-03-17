@@ -1,0 +1,94 @@
+Endurance Summary - 2026-03-18
+
+1. CSV analysis summary
+
+- 2026-03-16 23:43 matrix sweep:
+  73 cases, 72 PASS, 1 FAIL.
+  The only failure was ADV_NOT_FOUND at case 63.
+  This showed the main path was mostly working and the remaining issue was scan stability.
+
+- 2026-03-17 00:37 matrix sweep:
+  73 cases, 53 PASS, 20 FAIL, pass rate 72.60%.
+  Failure classes:
+    ADV_NOT_FOUND = 14
+    CONNECT_FAILED = 3
+    LED_WRITE_FAIL = 2
+    BATTERY_READ_FAIL = 1
+  Scope fail rates:
+    STOCK_A = 6 / 27 fail (22.22%)
+    STOCK_B = 11 / 27 fail (40.74%)
+    SYNCRO = 3 / 19 fail (15.79%)
+  Feature pattern:
+    COLOR was the unstable area.
+    STOCK_B COLOR = 11 fail / 12 total.
+    HEARTBEAT and RAINBOW were mostly stable.
+  RSSI trend:
+    PASS average RSSI was stronger than FAIL average RSSI.
+    PASS: A=-81.8 dBm, B=-86.4 dBm
+    FAIL: A=-91.1 dBm, B=-91.7 dBm
+  Conclusion:
+    The dominant issue is BLE discover/connect stability, especially on STOCK_B and especially during COLOR cases.
+
+- 2026-03-17 21:17 feature transition sweep:
+  9 cases, 0 PASS, 9 FAIL.
+  All 9 cases failed with ADV_NOT_FOUND and detail A=NG B=NG.
+  This means the feature-transition session structure is now generated as 9 cases, but the session failed before BLE connect because neither stock was discovered in the first scan window.
+
+2. Implemented changes
+
+- Arduino UNO runner:
+  Added D6/D7 simultaneous power control and D5 start pulse handling.
+  Added endurance cycle control and serial commands for GUI and Android automation.
+
+- Python GUI runner:
+  Restored MCU serial controls.
+  Removed DPM flow.
+  Changed MCU endurance to run LED blink, LED on, and battery checks after power-on.
+  Added Android logcat auto-start during endurance.
+  Improved failure classification for scan and adapter-off states.
+
+- New Android endurance app:
+  Added a dedicated BLE endurance app separate from the existing BLE LED app.
+  Added MCU Power Runner with PC bridge support to control the UNO from Android through adb reverse.
+  Added manual MCU Boot 2s and MCU Power Off controls.
+  Matched BLE command handling to the existing BLE LED app and stock firmware behavior.
+  Added startup wave alignment, RSSI logging in stress reports, and safer BLE disconnect handling.
+  Fixed brightness to max for sweep cases.
+  Added two sweep plans:
+    Matrix Sweep
+    Feature Transition
+  Feature Transition runs 9 cases in one power window:
+    STOCK_A -> STOCK_B -> SYNCRO
+    COLOR -> HEARTBEAT -> RAINBOW
+
+3. Recommended next work
+
+- Reduce ADV_NOT_FOUND:
+  Increase scan window from 4s to 6-8s.
+  Add one retry when only one side is missing.
+  Add 500-1000 ms boot-settle delay before the first scan in MCU mode.
+  Increase MCU disconnect wait to 1500-2000 ms.
+
+- Stabilize STOCK_B:
+  Check physical placement, orientation, and shielding around STOCK_B.
+  Use the new RSSI columns to compare failing placements and passing placements.
+
+- Stabilize COLOR stage:
+  Add one reconnect retry before marking CONNECT_FAILED.
+  Add one LED write retry when status 133 occurs.
+
+- Stabilize battery read:
+  Add one battery-read retry before marking BATTERY_READ_FAIL.
+
+- Re-validate feature transition:
+  After scan/connect stabilization, run the 9-case feature transition again.
+  The first target is a clean 9-case report with RSSI values present.
+
+4. Suggested work order
+
+1. Scan window extension and scan retry
+2. MCU boot-settle delay before scan
+3. Disconnect wait increase
+4. Re-test matrix sweep and compare RSSI
+5. Re-test feature transition
+6. Add connect/write/battery retries if failures remain
