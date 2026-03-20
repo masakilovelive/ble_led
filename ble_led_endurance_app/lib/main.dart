@@ -56,7 +56,7 @@ class BleLedApp extends StatelessWidget {
     final base = ThemeData.dark(useMaterial3: true);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'BLE LED STRESS',
+      title: 'Android Shipment Inspection',
       theme: base.copyWith(
         scaffoldBackgroundColor: Colors.black,
         colorScheme: base.colorScheme.copyWith(

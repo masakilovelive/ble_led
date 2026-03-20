@@ -5,8 +5,10 @@
 import FlutterMacOS
 import Foundation
 
+import package_info_plus
 import reactive_ble_mobile
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
+  FPPPackageInfoPlusPlugin.register(with: registry.registrar(forPlugin: "FPPPackageInfoPlusPlugin"))
   ReactiveBlePlugin.register(with: registry.registrar(forPlugin: "ReactiveBlePlugin"))
 }

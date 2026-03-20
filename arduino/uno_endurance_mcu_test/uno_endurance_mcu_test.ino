@@ -23,6 +23,7 @@ static const uint8_t PIN_PWR_B = 7;
 
 // --------------------------- Behavior config ---------------------------
 static const bool SENSOR_USE_PULLUP = false;
+static const bool SENSOR_STATUS_LOG_ENABLED = false;
 static const bool CALIBRATE_TO_MIN_ON_BOOT = true;
 
 // Power output polarity and sequence timing.
@@ -74,6 +75,9 @@ void printX9CStatus() {
 }
 
 void printSensorStatus() {
+  if (!SENSOR_STATUS_LOG_ENABLED) {
+    return;
+  }
   Serial.print(F("[SENS] D12="));
   Serial.print(hl(g_stableA));
   Serial.print(F(", D13="));
@@ -275,7 +279,9 @@ void pollSensors() {
   }
 
   if (updated) {
-    printSensorStatus();
+    if (SENSOR_STATUS_LOG_ENABLED) {
+      printSensorStatus();
+    }
   }
 }
 

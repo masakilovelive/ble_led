@@ -27,6 +27,7 @@ static const uint8_t PIN_START_PULSE = 5;
 // --------------------------- Behavior config ---------------------------
 static const bool SENSOR_USE_PULLUP = false;
 static const bool SENSOR_ON_LEVEL_HIGH = true;
+static const bool SENSOR_STATUS_LOG_ENABLED = false;
 
 static const bool POWER_ACTIVE_HIGH = true;
 static const bool START_PULSE_ACTIVE_HIGH = true;
@@ -140,6 +141,9 @@ bool readSensorPin(uint8_t pin) {
 }
 
 void printSensorStatus() {
+  if (!SENSOR_STATUS_LOG_ENABLED) {
+    return;
+  }
   Serial.print(F("[SENS] D12="));
   Serial.print(hl(g_stableA));
   Serial.print(F(", D13="));
@@ -550,7 +554,9 @@ void pollSensors() {
   }
 
   if (updated) {
-    printSensorStatus();
+    if (SENSOR_STATUS_LOG_ENABLED) {
+      printSensorStatus();
+    }
   }
 }
 
