@@ -98,6 +98,32 @@ P3
 - app UIとlogging要件を先に定義する
 - #3と#4が収束してから着手する
 
+4. Current failure factors - 2026-03-20
+
+- Primary cause:
+  BLE reconnect starts too early after MCU boot. The dominant restart-probe failure is `RECONNECT_INCOMPLETE`, where MCU boot succeeds but Android starts reconnect before Stock A/B advertising is stable.
+- Supporting evidence:
+  In the 30-cycle restart probe, `syncro_rainbow` was `9/10 PASS`, and the only failure was `A=disconnected B=disconnected auto_connect_ok=False`.
+- Root tendency:
+  The problem is not the replay logic itself. `startup wave -> replay apply` is working when reconnect succeeds. The weak point is the timing margin before reconnect.
+- Secondary cause:
+  Scan/connect stability is still the main risk in matrix-style endurance. Historical reports showed `ADV_NOT_FOUND` and `CONNECT_FAILED` as the dominant classes, especially on `STOCK_B` and especially during `COLOR`.
+- Tertiary cause:
+  `LED_WRITE_FAIL` and `BATTERY_READ_FAIL` are secondary effects of weak BLE links. They tend to happen after discover/connect quality has already degraded.
+- What is already confirmed stable:
+  `syncro_color_red` restart endurance = `10/10 PASS`
+  `syncro_heartbeat` restart endurance = `10/10 PASS`
+  `syncro_rainbow` restart endurance = `10/10 PASS` after increasing MCU boot-settle time to `3000 ms`
+- Current working interpretation:
+  The dominant technical issue is BLE discovery/reconnect timing, not feature replay correctness.
+- Current mitigations already applied:
+  App startup reconnect was extended to `6s timeout + 1 retry`.
+  Restart probe default `McuBootSettleMs` was increased from `1500` to `3000`.
+- Remaining recommended actions:
+  Keep `McuBootSettleMs=3000` as the default.
+  If failures remain, increase advertising margin further before reconnect.
+  Continue focusing on `ADV_NOT_FOUND`, `CONNECT_FAILED`, and `STOCK_B` RSSI stability before treating feature replay as the main issue.
+
 3. Suggested execution order
 
 1. #3 Bluetooth接続後に切断
