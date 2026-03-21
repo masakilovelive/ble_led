@@ -1340,7 +1340,7 @@ class ShipmentInspectionController
       _ledUi.setBrightness(target.side, 255);
       _ledUi.setHeartbeatColor(target.side, color);
       _ledUi.setHeartbeatInterval(target.side, intervalMs);
-      _heartbeat.start(
+      await _heartbeat.start(
         target.side,
         target.deviceId,
         interval: Duration(milliseconds: intervalMs),
@@ -1391,7 +1391,7 @@ class ShipmentInspectionController
     for (final side in StockSide.values) {
       final sideState = side == StockSide.a ? stockState.a : stockState.b;
       final deviceId = sideState.device?.id;
-      _heartbeat.stop(
+      await _heartbeat.stop(
         side,
         deviceId: deviceId,
         sendOff: false,

@@ -306,7 +306,7 @@ class StockController extends StateNotifier<StockState> {
     _manualDisconnect[side] = true;
     _reconnectTimers.remove(side)?.cancel();
     _stopBatteryPolling(side);
-    _ref
+    await _ref
         .read(heartbeatControllerProvider)
         .stop(side, sendOff: false, resetMode: false);
     await _cancelConnection(side);
@@ -456,7 +456,7 @@ class StockController extends StateNotifier<StockState> {
 
       if (sideUi.top.mode == LedMode.heartbeat ||
           sideUi.bottom.mode == LedMode.heartbeat) {
-        heartbeat.start(
+        await heartbeat.start(
           side,
           deviceId,
           interval: Duration(milliseconds: sideUi.heartbeatIntervalMs),

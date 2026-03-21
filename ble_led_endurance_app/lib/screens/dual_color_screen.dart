@@ -573,7 +573,9 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
                 ),
                 const SizedBox(width: 10),
                 OutlinedButton(
-                  onPressed: _setHeartbeatColorFromCurrent,
+                  onPressed: () async {
+                    await _setHeartbeatColorFromCurrent();
+                  },
                   child: const Text('SET'),
                 ),
               ],
@@ -729,7 +731,7 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
         continue;
       }
 
-      heartbeat.stop(
+      await heartbeat.stop(
         side,
         deviceId: deviceId,
         sendOff: false,
@@ -771,7 +773,7 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
       uiNotifier.setOutputEnabled(side, true);
       uiNotifier.setBrightness(side, _brightness);
       uiNotifier.setHeartbeatInterval(side, intervalMs);
-      heartbeat.start(
+      await heartbeat.start(
         side,
         deviceId,
         interval: Duration(milliseconds: intervalMs),
@@ -779,12 +781,21 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
     }
   }
 
-  void _setHeartbeatColorFromCurrent() {
+  Future<void> _setHeartbeatColorFromCurrent() async {
     final color = _currentPickerColor();
     final uiNotifier = ref.read(ledUiProvider.notifier);
     final stockState = ref.read(stockProvider);
     for (final side in _targetSides(stockState)) {
       uiNotifier.setHeartbeatColor(side, color);
+    }
+    final ledUiState = ref.read(ledUiProvider);
+    final heartbeatEnabled = _isModeActive(
+      stockState,
+      ledUiState,
+      LedMode.heartbeat,
+    );
+    if (heartbeatEnabled) {
+      await _startHeartbeat(_selectedHeartbeatPresetMs);
     }
   }
 
@@ -792,7 +803,7 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
     final stockState = ref.read(stockProvider);
     final heartbeat = ref.read(heartbeatControllerProvider);
     for (final side in _targetSides(stockState)) {
-      heartbeat.stop(
+      await heartbeat.stop(
         side,
         deviceId: _deviceId(stockState, side),
         sendOff: true,
@@ -811,7 +822,7 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
       if (deviceId == null) {
         continue;
       }
-      heartbeat.stop(
+      await heartbeat.stop(
         side,
         deviceId: deviceId,
         sendOff: false,
@@ -906,7 +917,7 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
       }
 
       for (final target in targets) {
-        heartbeat.stop(
+        await heartbeat.stop(
           target.side,
           deviceId: target.deviceId,
           sendOff: false,
@@ -994,7 +1005,7 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
 
       if (desired.top.mode == LedMode.heartbeat ||
           desired.bottom.mode == LedMode.heartbeat) {
-        heartbeat.start(
+        await heartbeat.start(
           target.side,
           target.deviceId,
           interval: Duration(milliseconds: desired.heartbeatIntervalMs),

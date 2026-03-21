@@ -17,6 +17,7 @@ const int _cmdAccelMode = 0x06;
 const int _cmdSetFrontColor = 0x07;
 const int _cmdSetRearColor = 0x08;
 const int _cmdSetOutputEnable = 0x09;
+const int _cmdHeartbeatMode = 0x0A;
 
 class LedController {
   final BleClient _client;
@@ -124,6 +125,39 @@ class LedController {
     );
   }
 
+  Future<void> setHeartbeatMode(
+    String deviceId, {
+    required bool enable,
+    required int bpm,
+    required int colorIndex,
+  }) async {
+    final clampedBpm = bpm.clamp(30, 255);
+    final clampedColorIndex = colorIndex.clamp(0, 4);
+    _log.i(
+      'set heartbeat -> ${enable ? 'ON' : 'OFF'} bpm=$clampedBpm colorIndex=$clampedColorIndex',
+    );
+    await _client.writePayload(
+      deviceId: deviceId,
+      serviceUuid: Env.advServiceUuid,
+      charUuid: Env.advCharUuid,
+      value: [
+        _cmdHeartbeatMode,
+        enable ? 0x01 : 0x00,
+        clampedBpm,
+        clampedColorIndex,
+      ],
+    );
+  }
+
+  Future<void> stopHeartbeatMode(String deviceId) async {
+    await setHeartbeatMode(
+      deviceId,
+      enable: false,
+      bpm: 60,
+      colorIndex: 0,
+    );
+  }
+
   Future<void> setAccelMode(String deviceId, bool enable) async {
     _log.i('set accel mode -> ${enable ? 'ON' : 'OFF'}');
     await _client.writePayload(
@@ -135,6 +169,7 @@ class LedController {
   }
 
   Future<void> applyIdleState(String deviceId) async {
+    await _safeIdle('heartbeat off', () => stopHeartbeatMode(deviceId));
     await _safeIdle('output disable', () => setOutputEnabled(deviceId, false));
     await _safeIdle('rainbow stop', () => stopRainbow(deviceId));
     await _safeIdle('accel off', () => setAccelMode(deviceId, false));
