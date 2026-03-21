@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart' hide Logger;
 
+import '../ble/led_ui_state.dart';
 import '../ble/stock_controller.dart';
 import 'dual_color_screen.dart';
 import 'splash_screen.dart';
@@ -37,6 +38,7 @@ class _AppRootState extends ConsumerState<AppRoot> with WidgetsBindingObserver {
     }
     setState(() => _stage = AppStage.color);
     Future<void>.microtask(() async {
+      await ref.read(ledUiProvider.notifier).ensureLoaded();
       final controller = ref.read(stockProvider.notifier);
       await controller.ensureLoaded();
       if (!mounted) {
@@ -61,6 +63,7 @@ class _AppRootState extends ConsumerState<AppRoot> with WidgetsBindingObserver {
   }
 
   Future<void> _restoreConnections() async {
+    await ref.read(ledUiProvider.notifier).ensureLoaded();
     final controller = ref.read(stockProvider.notifier);
     await controller.ensureLoaded();
     if (!mounted) {
@@ -70,8 +73,7 @@ class _AppRootState extends ConsumerState<AppRoot> with WidgetsBindingObserver {
     if (!stock.registered) {
       return;
     }
-    final needsReconnect =
-        stock.a.status != DeviceConnectionState.connected ||
+    final needsReconnect = stock.a.status != DeviceConnectionState.connected ||
         stock.b.status != DeviceConnectionState.connected;
     if (needsReconnect) {
       try {

@@ -52,9 +52,8 @@ class StockSideState {
       status: status ?? this.status,
       pairNumber: pairNumber ?? this.pairNumber,
       role: role ?? this.role,
-      message: identical(message, _sentinel)
-          ? this.message
-          : message as String?,
+      message:
+          identical(message, _sentinel) ? this.message : message as String?,
       resyncStatus: resyncStatus ?? this.resyncStatus,
       resyncNote: identical(resyncNote, _sentinel)
           ? this.resyncNote
@@ -251,37 +250,35 @@ class StockController extends StateNotifier<StockState> {
         ),
       );
 
-      final subscription = _client
-          .connect(device.id)
-          .listen(
-            (update) {
-              _setSideState(
-                side,
-                _sideState(side).copyWith(status: update.connectionState),
-              );
-              if (update.connectionState == DeviceConnectionState.connected) {
-                _reconnectTimers.remove(side)?.cancel();
-                unawaited(_handlePostConnect(side, device.id));
-              } else if (update.connectionState ==
-                  DeviceConnectionState.disconnected) {
-                _stopBatteryPolling(side);
-                _setResyncStatus(side, ResyncStatus.idle);
-                _scheduleReconnect(side);
-              }
-            },
-            onError: (e, st) {
-              _log.e('connect error', error: e, stackTrace: st);
-              _stopBatteryPolling(side);
-              _setSideState(
-                side,
-                _sideState(side).copyWith(
-                  status: DeviceConnectionState.disconnected,
-                  message: e.toString(),
-                ),
-              );
-              _scheduleReconnect(side);
-            },
+      final subscription = _client.connect(device.id).listen(
+        (update) {
+          _setSideState(
+            side,
+            _sideState(side).copyWith(status: update.connectionState),
           );
+          if (update.connectionState == DeviceConnectionState.connected) {
+            _reconnectTimers.remove(side)?.cancel();
+            unawaited(_handlePostConnect(side, device.id));
+          } else if (update.connectionState ==
+              DeviceConnectionState.disconnected) {
+            _stopBatteryPolling(side);
+            _setResyncStatus(side, ResyncStatus.idle);
+            _scheduleReconnect(side);
+          }
+        },
+        onError: (e, st) {
+          _log.e('connect error', error: e, stackTrace: st);
+          _stopBatteryPolling(side);
+          _setSideState(
+            side,
+            _sideState(side).copyWith(
+              status: DeviceConnectionState.disconnected,
+              message: e.toString(),
+            ),
+          );
+          _scheduleReconnect(side);
+        },
+      );
       _setConnection(side, subscription);
     });
   }
@@ -358,13 +355,13 @@ class StockController extends StateNotifier<StockState> {
       final services = await _client.discoverServices(device.id);
       final serviceMap = <String, Set<String>>{};
       for (final service in services) {
-        serviceMap[service.serviceId.toString().toLowerCase()] = service
-            .characteristics
-            .map(
-              (characteristic) =>
-                  characteristic.characteristicId.toString().toLowerCase(),
-            )
-            .toSet();
+        serviceMap[service.serviceId.toString().toLowerCase()] =
+            service.characteristics
+                .map(
+                  (characteristic) =>
+                      characteristic.characteristicId.toString().toLowerCase(),
+                )
+                .toSet();
       }
 
       final advChars = serviceMap[Env.advServiceUuid.toLowerCase()];
@@ -413,9 +410,8 @@ class StockController extends StateNotifier<StockState> {
   }
 
   void _setResyncStatus(StockSide side, ResyncStatus status, {String? note}) {
-    final clipped = note != null && note.length > 40
-        ? note.substring(0, 40)
-        : note;
+    final clipped =
+        note != null && note.length > 40 ? note.substring(0, 40) : note;
     _setSideState(
       side,
       _sideState(side).copyWith(resyncStatus: status, resyncNote: clipped),
@@ -427,6 +423,7 @@ class StockController extends StateNotifier<StockState> {
     if (_sideState(side).status != DeviceConnectionState.connected) {
       return;
     }
+    await _ref.read(ledUiProvider.notifier).ensureLoaded();
     await _readBatteryOnce(side);
     _startBatteryPolling(side);
     await _resyncAfterReconnect(side, deviceId);
@@ -449,7 +446,7 @@ class StockController extends StateNotifier<StockState> {
 
       if (sideUi.top.mode == LedMode.rainbow ||
           sideUi.bottom.mode == LedMode.rainbow) {
-        await led.startRainbow(deviceId, intervalMs: 40);
+        await led.startRainbow(deviceId, intervalMs: sideUi.rainbowIntervalMs);
         _ref
             .read(ledUiProvider.notifier)
             .setSegmentMode(side, ColorZone.both, LedMode.rainbow);
