@@ -250,7 +250,8 @@ class LedUiController extends StateNotifier<LedUiState> {
     return side == StockSide.a ? state.a : state.b;
   }
 
-  void setSegmentColor(StockSide side, ColorZone zone, Color color) {
+  void setSegmentColor(StockSide side, ColorZone zone, Color color,
+      {bool persist = true}) {
     _updateSide(side, (sideState) {
       switch (zone) {
         case ColorZone.top:
@@ -267,10 +268,11 @@ class LedUiController extends StateNotifier<LedUiState> {
             bottom: sideState.bottom.copyWith(color: color),
           );
       }
-    });
+    }, persist: persist);
   }
 
-  void setSegmentMode(StockSide side, ColorZone zone, LedMode mode) {
+  void setSegmentMode(StockSide side, ColorZone zone, LedMode mode,
+      {bool persist = true}) {
     _updateSide(side, (sideState) {
       switch (zone) {
         case ColorZone.top:
@@ -287,39 +289,44 @@ class LedUiController extends StateNotifier<LedUiState> {
             bottom: sideState.bottom.copyWith(mode: mode),
           );
       }
-    });
+    }, persist: persist);
   }
 
-  void setHeartbeatColor(StockSide side, Color color) {
+  void setHeartbeatColor(StockSide side, Color color,
+      {bool persist = true}) {
     _updateSide(side, (sideState) {
       return sideState.copyWith(heartbeatColor: color);
-    });
+    }, persist: persist);
   }
 
-  void setHeartbeatInterval(StockSide side, int intervalMs) {
+  void setHeartbeatInterval(StockSide side, int intervalMs,
+      {bool persist = true}) {
     _updateSide(side, (sideState) {
       return sideState.copyWith(heartbeatIntervalMs: intervalMs);
-    });
+    }, persist: persist);
   }
 
-  void setRainbowInterval(StockSide side, int intervalMs) {
+  void setRainbowInterval(StockSide side, int intervalMs,
+      {bool persist = true}) {
     final clamped = intervalMs.clamp(1, 65535);
     _updateSide(side, (sideState) {
       return sideState.copyWith(rainbowIntervalMs: clamped);
-    });
+    }, persist: persist);
   }
 
-  void setBrightness(StockSide side, double brightness) {
+  void setBrightness(StockSide side, double brightness,
+      {bool persist = true}) {
     final clamped = brightness.clamp(0.0, 255.0);
     _updateSide(side, (sideState) {
       return sideState.copyWith(brightness: clamped);
-    });
+    }, persist: persist);
   }
 
-  void setOutputEnabled(StockSide side, bool enabled) {
+  void setOutputEnabled(StockSide side, bool enabled,
+      {bool persist = true}) {
     _updateSide(side, (sideState) {
       return sideState.copyWith(outputEnabled: enabled);
-    });
+    }, persist: persist);
   }
 
   void setBatteryVoltage(StockSide side, double voltage, double percent) {
@@ -336,11 +343,9 @@ class LedUiController extends StateNotifier<LedUiState> {
     );
   }
 
-  void _updateSide(
-    StockSide side,
-    LedUiSideState Function(LedUiSideState sideState) update, {
-    bool persist = true,
-  }) {
+  void _updateSide(StockSide side,
+      LedUiSideState Function(LedUiSideState sideState) update,
+      {bool persist = true}) {
     if (side == StockSide.a) {
       state = LedUiState(a: update(state.a), b: state.b);
     } else {
@@ -389,7 +394,6 @@ class LedUiController extends StateNotifier<LedUiState> {
       // Persistence failure should not break manual control.
     }
   }
-
   @override
   void dispose() {
     _persistTimer?.cancel();

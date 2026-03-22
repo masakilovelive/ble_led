@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart' hide Logger;
 import 'package:logger/logger.dart' as app_logger;
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../env.dart';
+import 'ble_permissions.dart';
 import 'ble_client.dart';
 import 'led_controller.dart';
 import 'led_ui_state.dart';
@@ -187,9 +187,11 @@ class EnduranceState {
       doneCycles: doneCycles ?? this.doneCycles,
       passCount: passCount ?? this.passCount,
       failCount: failCount ?? this.failCount,
-      activeCycle:
-          identical(activeCycle, _sentinel) ? this.activeCycle : activeCycle as int?,
-      message: identical(message, _sentinel) ? this.message : message as String?,
+      activeCycle: identical(activeCycle, _sentinel)
+          ? this.activeCycle
+          : activeCycle as int?,
+      message:
+          identical(message, _sentinel) ? this.message : message as String?,
       reportPath: identical(reportPath, _sentinel)
           ? this.reportPath
           : reportPath as String?,
@@ -332,11 +334,13 @@ class EnduranceController extends StateNotifier<EnduranceState> {
 
       for (int cycle = 1; cycle <= settings.cycles; cycle++) {
         _throwIfStopRequested();
-        state = state.copyWith(activeCycle: cycle, message: 'Cycle $cycle running');
+        state =
+            state.copyWith(activeCycle: cycle, message: 'Cycle $cycle running');
         final record = await _runCycle(cycle, settings);
         final nextRecords = <EnduranceCycleRecord>[...state.records, record];
         final nextCounts = <String, int>{...state.failureCounts};
-        nextCounts[record.failureClass] = (nextCounts[record.failureClass] ?? 0) + 1;
+        nextCounts[record.failureClass] =
+            (nextCounts[record.failureClass] ?? 0) + 1;
 
         state = state.copyWith(
           doneCycles: cycle,
@@ -362,13 +366,14 @@ class EnduranceController extends StateNotifier<EnduranceState> {
       await _stock.waitForBothDisconnected(_postRunDisconnectTimeout);
       final reportPaths = await _exportReports();
       state = state.copyWith(
-        status: _stopRequested ? EnduranceRunStatus.stopped : EnduranceRunStatus.done,
+        status: _stopRequested
+            ? EnduranceRunStatus.stopped
+            : EnduranceRunStatus.done,
         activeCycle: null,
         reportPath: reportPaths?.$1,
         summaryPath: reportPaths?.$2,
-        message: _stopRequested
-            ? 'Endurance run stopped'
-            : 'Endurance run finished',
+        message:
+            _stopRequested ? 'Endurance run stopped' : 'Endurance run finished',
       );
       if (reportPaths != null) {
         _appendLog('[ENDURANCE] report ${reportPaths.$1}');
@@ -533,7 +538,9 @@ class EnduranceController extends StateNotifier<EnduranceState> {
       connectOk: connectOk,
       gattOk: gattOk,
       disconnectOk: disconnectOk,
-      lastLog: cycleLogs.skip(cycleLogs.length > 6 ? cycleLogs.length - 6 : 0).join(' || '),
+      lastLog: cycleLogs
+          .skip(cycleLogs.length > 6 ? cycleLogs.length - 6 : 0)
+          .join(' || '),
     );
   }
 
@@ -680,7 +687,8 @@ class EnduranceController extends StateNotifier<EnduranceState> {
     }
     final directory = await _resolveReportDirectory();
     final stamp = _timestampForFile(DateTime.now());
-    final detailPath = '${directory.path}${Platform.pathSeparator}endurance_report_$stamp.csv';
+    final detailPath =
+        '${directory.path}${Platform.pathSeparator}endurance_report_$stamp.csv';
     final summaryPath =
         '${directory.path}${Platform.pathSeparator}endurance_report_summary_$stamp.csv';
 
@@ -774,17 +782,7 @@ class EnduranceController extends StateNotifier<EnduranceState> {
   }
 
   Future<bool> _ensurePermissions() async {
-    if (!Platform.isAndroid) {
-      return true;
-    }
-    final statuses = await <Permission>[
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-    ].request();
-    return statuses.values.every(
-      (status) => status.isGranted || status.isLimited,
-    );
+    return ensureBlePermissions(_log);
   }
 
   void _throwIfStopRequested() {

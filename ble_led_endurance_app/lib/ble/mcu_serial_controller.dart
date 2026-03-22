@@ -54,9 +54,9 @@ class McuSerialState {
   });
 
   factory McuSerialState.initial() {
-    return const McuSerialState(
+    return McuSerialState(
       transportMode: McuTransportMode.bridge,
-      bridgeHost: '127.0.0.1',
+      bridgeHost: Platform.isAndroid ? '127.0.0.1' : '',
       bridgePort: 9876,
       devices: <UsbDevice>[],
       selectedDeviceId: null,
@@ -151,6 +151,15 @@ class McuSerialController extends StateNotifier<McuSerialState> {
       state = state.copyWith(message: null);
       return;
     }
+    if (!Platform.isAndroid) {
+      state = state.copyWith(
+        devices: const <UsbDevice>[],
+        selectedDeviceId: null,
+        message:
+            'USB OTG MCU control is supported on Android only. Use PC bridge on iPhone.',
+      );
+      return;
+    }
     try {
       final devices = await UsbSerial.listDevices();
       final selectedId = state.selectedDeviceId;
@@ -180,6 +189,14 @@ class McuSerialController extends StateNotifier<McuSerialState> {
     await disconnect();
     if (state.transportMode == McuTransportMode.bridge) {
       return _connectBridge();
+    }
+    if (!Platform.isAndroid) {
+      state = state.copyWith(
+        message:
+            'USB OTG MCU control is supported on Android only. Use PC bridge on iPhone.',
+        statusText: 'ERROR',
+      );
+      return false;
     }
     return _connectUsb(deviceId: deviceId, baudRate: baudRate);
   }
@@ -215,7 +232,20 @@ class McuSerialController extends StateNotifier<McuSerialState> {
             connected: false,
             connectedDeviceId: null,
             statusText: 'ERROR',
-            message: 'MCU bridge read failed: $error',
+            message: _bridgeLinkErrorMessage(
+              host: host,
+              port: port,
+              error: error,
+            ),
+          );
+        },
+        onDone: () {
+          _appendLog('[MCU] bridge connection closed');
+          state = state.copyWith(
+            connected: false,
+            connectedDeviceId: null,
+            statusText: 'ERROR',
+            message: _bridgeClosedMessage(host: host, port: port),
           );
         },
       );
@@ -235,7 +265,9 @@ class McuSerialController extends StateNotifier<McuSerialState> {
         await disconnect();
         state = state.copyWith(
           statusText: 'ERROR',
-          message: 'MCU bridge connected but the round-trip check failed during send.',
+          message:
+              'MCU bridge reached $host:$port, but the serial round-trip send failed. '
+              'The host bridge is up, but the USB serial side may have dropped.',
         );
         return false;
       }
@@ -249,7 +281,8 @@ class McuSerialController extends StateNotifier<McuSerialState> {
         state = state.copyWith(
           statusText: 'ERROR',
           message:
-              'MCU bridge connected, but the UNO did not answer the serial round-trip check. Check the bridge process and COM port.',
+              'MCU bridge reached $host:$port, but the UNO did not answer the serial round-trip check. '
+              'Check the host USB serial port, bridge process, and UNO power.',
         );
         return false;
       }
@@ -260,8 +293,11 @@ class McuSerialController extends StateNotifier<McuSerialState> {
         connected: false,
         connectedDeviceId: null,
         statusText: 'ERROR',
-        message:
-            'MCU bridge connect failed: $e. Start the PC bridge and adb reverse first.',
+        message: _bridgeConnectErrorMessage(
+          host: host,
+          port: port,
+          error: e,
+        ),
       );
       return false;
     }
@@ -630,6 +666,64 @@ class McuSerialController extends StateNotifier<McuSerialState> {
       startIndex: startIndex,
     );
     return log != null;
+  }
+
+  String _bridgeLinkErrorMessage({
+    required String host,
+    required int port,
+    required Object error,
+  }) {
+    final text = error.toString();
+    final lower = text.toLowerCase();
+    if (lower.contains('connection reset') ||
+        lower.contains('broken pipe') ||
+        lower.contains('socket has been closed')) {
+      return 'MCU bridge at $host:$port closed after connecting. '
+          'The host USB serial link likely dropped or the bridge process ended.';
+    }
+    return 'MCU bridge read failed from $host:$port: $error. '
+        'The host is reachable, but the USB serial side may be unstable.';
+  }
+
+  String _bridgeConnectErrorMessage({
+    required String host,
+    required int port,
+    required Object error,
+  }) {
+    final text = error.toString();
+    final lower = text.toLowerCase();
+    if (lower.contains('operation not permitted') ||
+        lower.contains('errno = 1')) {
+      return 'MCU bridge connect failed to $host:$port: $error. '
+          'On iPhone, allow Local Network access for this app in Settings and retry.';
+    }
+    if (lower.contains('connection refused') ||
+        lower.contains('errno = 61')) {
+      return 'MCU bridge connect failed to $host:$port: $error. '
+          'The host was reached, but nothing accepted the connection. '
+          'Start the Mac bridge and check the listen port.';
+    }
+    if (lower.contains('timed out') ||
+        lower.contains('errno = 60')) {
+      return 'MCU bridge connect timed out to $host:$port. '
+          'Check that the iPhone and host are on the same Wi-Fi, and allow incoming connections for Python in the Mac firewall.';
+    }
+    if (lower.contains('no route to host') ||
+        lower.contains('network is unreachable') ||
+        lower.contains('host lookup failed')) {
+      return 'MCU bridge connect failed to $host:$port: $error. '
+          'Verify the host LAN IP and that the iPhone is on the same network.';
+    }
+    return 'MCU bridge connect failed to $host:$port: $error. '
+        'Confirm the host IP/port and that the PC bridge is running.';
+  }
+
+  String _bridgeClosedMessage({
+    required String host,
+    required int port,
+  }) {
+    return 'MCU bridge connection to $host:$port closed. '
+        'The host bridge stopped or lost its USB serial connection.';
   }
 
   UsbDevice? _deviceById(String? deviceId) {

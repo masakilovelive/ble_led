@@ -8,9 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart' as app_logger;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../env.dart';
+import 'ble_permissions.dart';
 import 'ble_client.dart';
 import 'heartbeat_controller.dart';
 import 'led_controller.dart';
@@ -85,7 +85,7 @@ extension ShipmentStepKindText on ShipmentStepKind {
   String get description {
     switch (this) {
       case ShipmentStepKind.bleConnect:
-        return 'Android で scan / connect を行い、RSSI と接続時間を確認します。';
+        return '端末で scan / connect を行い、RSSI と接続時間を確認します。';
       case ShipmentStepKind.ledColor:
         return 'R / G / B / White を順に表示して目視確認します。';
       case ShipmentStepKind.heartbeat:
@@ -153,7 +153,7 @@ extension ShipmentStepKindText on ShipmentStepKind {
   String get operatorHint {
     switch (this) {
       case ShipmentStepKind.ledColor:
-        return 'Android アプリが自動で色を順送りした後、最後の White を維持します。';
+        return 'アプリが自動で色を順送りした後、最後の White を維持します。';
       case ShipmentStepKind.heartbeat:
         return '赤色 heartbeat を継続表示します。';
       case ShipmentStepKind.rainbow:
@@ -618,55 +618,62 @@ class ShipmentInspectionController
       await _runAccelerationStep();
 
       await _setAllIdleBestEffort();
-      final reportPaths = await _exportReports();
-      if (reportPaths != null) {
-        _appendDetailToStep(
-          ShipmentStepKind.recordCheck,
-          ' / report=${reportPaths.$1.split(Platform.pathSeparator).last}',
-        );
-      }
       state = state.copyWith(
         status: ShipmentRunStatus.done,
         activeStepIndex: null,
         awaitingOperatorStep: null,
         operatorPrompt: null,
         operatorHint: null,
-        reportPath: reportPaths?.$1,
-        summaryPath: reportPaths?.$2,
         finishedAt: DateTime.now(),
         message: 'Shipment inspection finished',
+      );
+      var reportPaths = await _exportReports();
+      if (reportPaths != null) {
+        _appendDetailToStep(
+          ShipmentStepKind.recordCheck,
+          ' / report=${reportPaths.$1.split(Platform.pathSeparator).last}',
+        );
+        reportPaths = await _exportReports();
+      }
+      state = state.copyWith(
+        reportPath: reportPaths?.$1,
+        summaryPath: reportPaths?.$2,
       );
       _appendLog('[SHIP] finished');
     } on _ShipmentStopRequested {
       await _setAllIdleBestEffort();
-      final reportPaths = await _exportReports();
       state = state.copyWith(
         status: ShipmentRunStatus.stopped,
         activeStepIndex: null,
         awaitingOperatorStep: null,
         operatorPrompt: null,
         operatorHint: null,
-        reportPath: reportPaths?.$1,
-        summaryPath: reportPaths?.$2,
         finishedAt: DateTime.now(),
         message: 'Shipment inspection stopped',
+      );
+      final reportPaths = await _exportReports();
+      state = state.copyWith(
+        reportPath: reportPaths?.$1,
+        summaryPath: reportPaths?.$2,
       );
     } on _ShipmentStepFailure catch (failure) {
       _log.w('shipment step failed', error: failure.detail);
       await _setAllIdleBestEffort();
-      final reportPaths = await _exportReports();
       state = state.copyWith(
         status: ShipmentRunStatus.failed,
         activeStepIndex: null,
         awaitingOperatorStep: null,
         operatorPrompt: null,
         operatorHint: null,
-        reportPath: reportPaths?.$1,
-        summaryPath: reportPaths?.$2,
         failureClass: failure.failureClass,
         failureDetail: failure.detail,
         finishedAt: DateTime.now(),
         message: '${failure.kind.title} failed: ${failure.failureClass}',
+      );
+      final reportPaths = await _exportReports();
+      state = state.copyWith(
+        reportPath: reportPaths?.$1,
+        summaryPath: reportPaths?.$2,
       );
       _appendLog(
         '[SHIP] failed step=${failure.kind.title} class=${failure.failureClass} detail=${failure.detail}',
@@ -674,19 +681,21 @@ class ShipmentInspectionController
     } catch (e, st) {
       _log.e('shipment inspection failed', error: e, stackTrace: st);
       await _setAllIdleBestEffort();
-      final reportPaths = await _exportReports();
       state = state.copyWith(
         status: ShipmentRunStatus.error,
         activeStepIndex: null,
         awaitingOperatorStep: null,
         operatorPrompt: null,
         operatorHint: null,
-        reportPath: reportPaths?.$1,
-        summaryPath: reportPaths?.$2,
         failureClass: 'UNEXPECTED_ERROR',
         failureDetail: e.toString(),
         finishedAt: DateTime.now(),
         message: e.toString(),
+      );
+      final reportPaths = await _exportReports();
+      state = state.copyWith(
+        reportPath: reportPaths?.$1,
+        summaryPath: reportPaths?.$2,
       );
       _appendLog('[SHIP] error: $e');
     } finally {
@@ -849,7 +858,7 @@ class ShipmentInspectionController
         _setStepPass(
           kind,
           detail:
-              '${kind == ShipmentStepKind.bleConnect ? 'Android auto connect' : 'Reconnect'} ok in ${lastEvidence.elapsedMs}ms / retry $attempt/${config.connectRetryCount} / RSSI A=${lastEvidence.rssiA} B=${lastEvidence.rssiB}',
+              '${kind == ShipmentStepKind.bleConnect ? 'Auto connect' : 'Reconnect'} ok in ${lastEvidence.elapsedMs}ms / retry $attempt/${config.connectRetryCount} / RSSI A=${lastEvidence.rssiA} B=${lastEvidence.rssiB}',
           rssiA: lastEvidence.rssiA,
           rssiB: lastEvidence.rssiB,
         );
@@ -1109,6 +1118,7 @@ class ShipmentInspectionController
     _ref.invalidate(stockProvider);
     _ref.invalidate(bleClientProvider);
     await _interruptibleDelay(const Duration(milliseconds: 800));
+    await _ref.read(ledUiProvider.notifier).ensureLoaded();
     await _ref.read(stockProvider.notifier).ensureLoaded();
 
     final stockState = _ref.read(stockProvider);
@@ -1364,6 +1374,7 @@ class ShipmentInspectionController
       await _led.startRainbow(target.deviceId, intervalMs: intervalMs);
       _ledUi.setOutputEnabled(target.side, true);
       _ledUi.setBrightness(target.side, 255);
+      _ledUi.setRainbowInterval(target.side, intervalMs);
       _ledUi.setSegmentMode(target.side, ColorZone.both, LedMode.rainbow);
     }
   }
@@ -1510,13 +1521,14 @@ class ShipmentInspectionController
   }
 
   Future<String?> _validateBeforeStart(ShipmentInspectionConfig config) async {
-    if (!Platform.isAndroid) {
-      return 'Shipment inspection app runs on Android only.';
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      return 'Shipment inspection currently supports Android or iPhone.';
     }
     final granted = await _ensurePermissions();
     if (!granted) {
       return 'BLE permissions not granted.';
     }
+    await _ref.read(ledUiProvider.notifier).ensureLoaded();
     await _stock.ensureLoaded();
     final stockState = _ref.read(stockProvider);
     if (!stockState.registered) {
@@ -1530,6 +1542,9 @@ class ShipmentInspectionController
     }
     if (config.requireMcuRunner) {
       final mcuState = _ref.read(mcuSerialProvider);
+      if (Platform.isIOS && mcuState.transportMode != McuTransportMode.bridge) {
+        return 'iPhone requires PC bridge mode for the MCU runner.';
+      }
       if (mcuState.transportMode == McuTransportMode.bridge) {
         if (mcuState.bridgeHost.trim().isEmpty ||
             mcuState.bridgePort <= 0 ||
@@ -1548,21 +1563,7 @@ class ShipmentInspectionController
   }
 
   Future<bool> _ensurePermissions() async {
-    if (!Platform.isAndroid) {
-      return true;
-    }
-    final statuses = await <Permission>[
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-    ].request();
-    final granted = statuses.values.every(
-      (status) => status.isGranted || status.isLimited,
-    );
-    if (!granted) {
-      _log.w('BLE permission denied: $statuses');
-    }
-    return granted;
+    return ensureBlePermissions(_log);
   }
 
   Future<String?> _resolveAppVersion() async {

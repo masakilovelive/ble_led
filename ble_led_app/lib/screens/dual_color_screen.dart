@@ -64,6 +64,12 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
         return;
       }
 
+      if (_shouldSkipStartupWave(next)) {
+        _startupWaveTimer?.cancel();
+        _startupWaveCompletedForCurrentConnection = true;
+        return;
+      }
+
       if (!_startupWaveCompletedForCurrentConnection && !_startupWaveRunning) {
         _scheduleStartupWave();
       }
@@ -77,9 +83,10 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
         setState(() => _heartbeatOn = !_heartbeatOn);
       }
     });
-    Future<void>.microtask(
-      () => ref.read(stockProvider.notifier).ensureLoaded(),
-    );
+    Future<void>.microtask(() async {
+      await ref.read(ledUiProvider.notifier).ensureLoaded();
+      await ref.read(stockProvider.notifier).ensureLoaded();
+    });
   }
 
   @override
@@ -879,6 +886,10 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
       if (!_bothConnected(stockState)) {
         return;
       }
+      if (_shouldSkipStartupWave(stockState)) {
+        _startupWaveCompletedForCurrentConnection = true;
+        return;
+      }
       _startupWaveCompletedForCurrentConnection = true;
       unawaited(_runDefaultStartupWave());
     });
@@ -1056,6 +1067,19 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
 
   String? _deviceId(StockState state, StockSide side) {
     return side == StockSide.a ? state.a.device?.id : state.b.device?.id;
+  }
+
+  bool _shouldSkipStartupWave(StockState stockState) {
+    final uiState = ref.read(ledUiProvider);
+    for (final side in _connectedSides(stockState)) {
+      final sideUi = uiState.sideState(side);
+      final hasRestorableMode =
+          sideUi.top.mode != LedMode.off || sideUi.bottom.mode != LedMode.off;
+      if (sideUi.outputEnabled && hasRestorableMode) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Color _segmentDisplayColor(LedUiSegmentState state, Color heartbeatColor) {

@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart' hide Logger;
 import 'package:logger/logger.dart' as app_logger;
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../env.dart';
+import 'ble_permissions.dart';
 import 'ble_client.dart';
 import 'heartbeat_controller.dart';
 import 'led_controller.dart';
@@ -1507,7 +1507,7 @@ class StressLabController extends StateNotifier<StressLabState> {
       _ledUi.setHeartbeatColor(side, color);
       _ledUi.setHeartbeatInterval(side, interval.inMilliseconds);
       _ledUi.setSegmentColor(side, ColorZone.both, color);
-      _heartbeat.start(side, deviceId, interval: interval);
+      await _heartbeat.start(side, deviceId, interval: interval);
     }
   }
 
@@ -1519,6 +1519,7 @@ class StressLabController extends StateNotifier<StressLabState> {
     for (final side in targets) {
       final deviceId = _deviceId(side)!;
       await _led.startRainbow(deviceId, intervalMs: intervalMs);
+      _ledUi.setRainbowInterval(side, intervalMs);
       _ledUi.setSegmentMode(side, ColorZone.both, LedMode.rainbow);
     }
   }
@@ -1528,7 +1529,7 @@ class StressLabController extends StateNotifier<StressLabState> {
     for (final side in StockSide.values) {
       final sideState = side == StockSide.a ? stockState.a : stockState.b;
       final deviceId = sideState.device?.id;
-      _heartbeat.stop(
+      await _heartbeat.stop(
         side,
         deviceId: deviceId,
         sendOff: false,
@@ -1550,9 +1551,8 @@ class StressLabController extends StateNotifier<StressLabState> {
 
   Future<String?> _runStartupWaveAll() async {
     final stockState = _ref.read(stockProvider);
-    final stepMs = (_startupCycleMs / _startupPalette.length)
-        .round()
-        .clamp(60, 5000);
+    final stepMs =
+        (_startupCycleMs / _startupPalette.length).round().clamp(60, 5000);
 
     try {
       final targets = <({StockSide side, String deviceId, int brightness})>[];
@@ -1571,7 +1571,7 @@ class StressLabController extends StateNotifier<StressLabState> {
       }
 
       for (final target in targets) {
-        _heartbeat.stop(
+        await _heartbeat.stop(
           target.side,
           deviceId: target.deviceId,
           sendOff: false,
@@ -2142,17 +2142,7 @@ class StressLabController extends StateNotifier<StressLabState> {
   }
 
   Future<bool> _ensurePermissions() async {
-    if (!Platform.isAndroid) {
-      return true;
-    }
-    final statuses = await <Permission>[
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-    ].request();
-    return statuses.values.every(
-      (status) => status.isGranted || status.isLimited,
-    );
+    return ensureBlePermissions(_log);
   }
 
   void _throwIfStopRequested() {
@@ -2185,16 +2175,16 @@ class StressLabController extends StateNotifier<StressLabState> {
     }).join(',');
   }
 
-String _timestampIso(DateTime dateTime) {
-  return dateTime.toIso8601String();
-}
+  String _timestampIso(DateTime dateTime) {
+    return dateTime.toIso8601String();
+  }
 
-String _formatRssi(int? value) {
-  return value == null ? '--' : '${value}dBm';
-}
+  String _formatRssi(int? value) {
+    return value == null ? '--' : '${value}dBm';
+  }
 
-String _timestampForFile(DateTime dateTime) {
-  final y = dateTime.year.toString().padLeft(4, '0');
+  String _timestampForFile(DateTime dateTime) {
+    final y = dateTime.year.toString().padLeft(4, '0');
     final m = dateTime.month.toString().padLeft(2, '0');
     final d = dateTime.day.toString().padLeft(2, '0');
     final hh = dateTime.hour.toString().padLeft(2, '0');

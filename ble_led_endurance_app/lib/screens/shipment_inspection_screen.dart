@@ -88,9 +88,17 @@ class _ShipmentInspectionScreenState
     _requireMcuRunner = defaults.requireMcuRunner;
     _verifyGatt = defaults.verifyGattOnConnect;
     _includeAcceleration = defaults.includeAccelerationCheck;
-    _mcuTransportMode = mcuDefaults.transportMode;
+    _mcuTransportMode = Platform.isAndroid
+        ? mcuDefaults.transportMode
+        : McuTransportMode.bridge;
     Future<void>.microtask(
-      () => ref.read(mcuSerialProvider.notifier).refreshDevices(),
+      () async {
+        final serial = ref.read(mcuSerialProvider.notifier);
+        if (!Platform.isAndroid) {
+          serial.setTransportMode(McuTransportMode.bridge);
+        }
+        await serial.refreshDevices();
+      },
     );
   }
 
@@ -126,7 +134,7 @@ class _ShipmentInspectionScreenState
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: const Text('ANDROID SHIPMENT INSPECTION'),
+        title: const Text('SHIPMENT INSPECTION'),
         actions: [
           IconButton(
             tooltip: 'Bluetooth Setup',
@@ -168,9 +176,15 @@ class _ShipmentInspectionScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (!Platform.isAndroid)
+              if (Platform.isIOS)
                 const _WarningCard(
-                  text: 'このアプリの出荷検査実行は Android 前提です。Windows では UI 確認のみ可能です。',
+                  text:
+                      'iPhone では MCU runner を PC Bridge で使用してください。Bridge Host には同一ネットワーク上の PC/Mac の IP を入力します。',
+                )
+              else if (!Platform.isAndroid)
+                const _WarningCard(
+                  text:
+                      'このアプリの出荷検査実行は Android / iPhone 前提です。その他の環境では UI 確認のみを想定しています。',
                 ),
               _buildRunCard(context, shipmentState),
               const SizedBox(height: 14),
@@ -518,8 +532,9 @@ class _ShipmentInspectionScreenState
     McuSerialState mcuState,
   ) {
     final enabled = !shipmentState.isRunning;
+    final supportsUsbOtg = Platform.isAndroid;
     final isBridge = _mcuTransportMode == McuTransportMode.bridge;
-    final bridgePort = _mcuBridgePortController.text.trim().isEmpty
+    final bridgePortText = _mcuBridgePortController.text.trim().isEmpty
         ? '9876'
         : _mcuBridgePortController.text.trim();
     final serial = ref.read(mcuSerialProvider.notifier);
@@ -553,9 +568,13 @@ class _ShipmentInspectionScreenState
             const SizedBox(height: 8),
             if (isBridge)
               SelectableText(
-                'Bridge list: powershell -ExecutionPolicy Bypass -File .\\scripts\\start_mcu_android_bridge.ps1 -ListPorts\n'
-                'Bridge start: powershell -ExecutionPolicy Bypass -File .\\scripts\\start_mcu_android_bridge.ps1 -ComPort COM4 -ListenPort $bridgePort\n'
-                'Android app: host 127.0.0.1 / port $bridgePort',
+                Platform.isIOS
+                    ? 'Bridge list: python3 scripts/start_mcu_bridge_mac.py --list-ports\n'
+                        'Bridge start: python3 scripts/start_mcu_bridge_mac.py --serial-port /dev/cu.usbmodemXXXX --listen-port $bridgePortText\n'
+                        'iPhone app: host <PC or Mac LAN IP> / port $bridgePortText'
+                    : 'Bridge list: powershell -ExecutionPolicy Bypass -File .\\scripts\\start_mcu_android_bridge.ps1 -ListPorts\n'
+                        'Bridge start: powershell -ExecutionPolicy Bypass -File .\\scripts\\start_mcu_android_bridge.ps1 -ComPort COM4 -ListenPort $bridgePortText\n'
+                        'Android app: host 127.0.0.1 / port $bridgePortText',
                 style: const TextStyle(color: Colors.amberAccent),
               )
             else
@@ -580,19 +599,20 @@ class _ShipmentInspectionScreenState
                         }
                       : null,
                 ),
-                ChoiceChip(
-                  label: const Text('USB OTG'),
-                  selected: !isBridge,
-                  onSelected: enabled && !mcuState.connected
-                      ? (_) {
-                          setState(
-                            () => _mcuTransportMode = McuTransportMode.usb,
-                          );
-                          serial.setTransportMode(McuTransportMode.usb);
-                          serial.refreshDevices();
-                        }
-                      : null,
-                ),
+                if (supportsUsbOtg)
+                  ChoiceChip(
+                    label: const Text('USB OTG'),
+                    selected: !isBridge,
+                    onSelected: enabled && !mcuState.connected
+                        ? (_) {
+                            setState(
+                              () => _mcuTransportMode = McuTransportMode.usb,
+                            );
+                            serial.setTransportMode(McuTransportMode.usb);
+                            serial.refreshDevices();
+                          }
+                        : null,
+                  ),
               ],
             ),
             const SizedBox(height: 10),

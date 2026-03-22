@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,7 +28,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   @override
   void initState() {
     super.initState();
-    final mcuDefaults = McuSerialState.initial();
+    final mcuDefaults = ref.read(mcuSerialProvider);
     _mcuBridgeHostController = TextEditingController(
       text: mcuDefaults.bridgeHost,
     );
@@ -35,9 +37,14 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     );
     _mcuTransportMode = mcuDefaults.transportMode;
     Future<void>.microtask(() async {
+      final serial = ref.read(mcuSerialProvider.notifier);
+      if (!Platform.isAndroid) {
+        _mcuTransportMode = McuTransportMode.bridge;
+        serial.setTransportMode(McuTransportMode.bridge);
+      }
       await ref.read(stockProvider.notifier).ensureLoaded();
       await ref.read(scanProvider.notifier).start();
-      await ref.read(mcuSerialProvider.notifier).refreshDevices();
+      await serial.refreshDevices();
     });
   }
 
@@ -255,6 +262,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     final serial = ref.read(mcuSerialProvider.notifier);
     final devices = mcuState.devices;
     final selectedId = mcuState.selectedDeviceId;
+    final supportsUsbOtg = Platform.isAndroid;
     final isBridge = _mcuTransportMode == McuTransportMode.bridge;
     return Card(
       color: Colors.white10,
@@ -288,17 +296,20 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                           serial.setTransportMode(McuTransportMode.bridge);
                         },
                 ),
-                ChoiceChip(
-                  label: const Text('USB OTG'),
-                  selected: !isBridge,
-                  onSelected: _mcuBusy || mcuState.connected
-                      ? null
-                      : (_) {
-                          setState(() => _mcuTransportMode = McuTransportMode.usb);
-                          serial.setTransportMode(McuTransportMode.usb);
-                          serial.refreshDevices();
-                        },
-                ),
+                if (supportsUsbOtg)
+                  ChoiceChip(
+                    label: const Text('USB OTG'),
+                    selected: !isBridge,
+                    onSelected: _mcuBusy || mcuState.connected
+                        ? null
+                        : (_) {
+                            setState(
+                              () => _mcuTransportMode = McuTransportMode.usb,
+                            );
+                            serial.setTransportMode(McuTransportMode.usb);
+                            serial.refreshDevices();
+                          },
+                  ),
               ],
             ),
             const SizedBox(height: 10),
@@ -439,7 +450,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
             const SizedBox(height: 6),
             Text(
               isBridge
-                  ? 'PC Bridge: run scripts\\start_mcu_android_bridge.ps1 -ComPort COM4, then use Connect MCU.'
+                  ? Platform.isIOS
+                      ? 'PC Bridge: run python3 scripts/start_mcu_bridge_mac.py --serial-port /dev/cu.usbmodemXXXX on the host Mac, then enter that host IP and use Connect MCU.'
+                      : 'PC Bridge: run scripts\\start_mcu_android_bridge.ps1 -ComPort COM4, then use Connect MCU.'
                   : 'USB OTG: connect the phone directly to the UNO.',
               style: const TextStyle(color: Colors.amberAccent),
             ),
@@ -486,9 +499,8 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     try {
       final serial = ref.read(mcuSerialProvider.notifier);
       await _applyMcuConfig(serial);
-      final connected = ref.read(mcuSerialProvider).connected
-          ? true
-          : await serial.connect();
+      final connected =
+          ref.read(mcuSerialProvider).connected ? true : await serial.connect();
       if (!connected) {
         if (!mounted) {
           return;
@@ -613,8 +625,7 @@ class _SetupInput extends StatelessWidget {
       child: TextField(
         controller: controller,
         enabled: enabled,
-        keyboardType:
-            numericOnly ? TextInputType.number : TextInputType.text,
+        keyboardType: numericOnly ? TextInputType.number : TextInputType.text,
         inputFormatters: numericOnly
             ? <TextInputFormatter>[
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),

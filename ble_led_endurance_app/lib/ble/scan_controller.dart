@@ -1,12 +1,11 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart' hide Logger;
 import 'package:logger/logger.dart' as app_logger;
-import 'package:permission_handler/permission_handler.dart';
 
 import '../env.dart';
+import 'ble_permissions.dart';
 import 'ble_client.dart';
 import 'models.dart';
 
@@ -49,23 +48,7 @@ class ScanController extends StateNotifier<AsyncValue<List<BleDevice>>> {
   }
 
   Future<bool> _ensurePermissions() async {
-    if (!Platform.isAndroid) {
-      return true;
-    }
-
-    final permissions = <Permission>[
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-    ];
-
-    final statuses = await permissions.request();
-    final granted =
-        statuses.values.every((status) => status.isGranted || status.isLimited);
-    if (!granted) {
-      _log.w('BLE permission denied: $statuses');
-    }
-    return granted;
+    return ensureBlePermissions(_log);
   }
 
   Future<void> stop() async {
