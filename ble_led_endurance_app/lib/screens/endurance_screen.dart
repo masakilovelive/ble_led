@@ -824,6 +824,14 @@ class _DeviceStatusPane extends StatelessWidget {
                 '$batteryPercent%',
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
+              if (sideUi.charging) ...[
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.bolt_rounded,
+                  color: Colors.amberAccent,
+                  size: 18,
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 6),

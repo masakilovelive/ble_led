@@ -58,6 +58,7 @@ class LedUiSideState {
   final bool outputEnabled;
   final double batteryPercent;
   final double? batteryVoltage;
+  final bool charging;
 
   const LedUiSideState({
     required this.top,
@@ -69,6 +70,7 @@ class LedUiSideState {
     required this.outputEnabled,
     required this.batteryPercent,
     this.batteryVoltage,
+    required this.charging,
   });
 
   LedUiSideState copyWith({
@@ -81,6 +83,7 @@ class LedUiSideState {
     bool? outputEnabled,
     double? batteryPercent,
     double? batteryVoltage,
+    bool? charging,
   }) {
     return LedUiSideState(
       top: top ?? this.top,
@@ -92,6 +95,7 @@ class LedUiSideState {
       outputEnabled: outputEnabled ?? this.outputEnabled,
       batteryPercent: batteryPercent ?? this.batteryPercent,
       batteryVoltage: batteryVoltage ?? this.batteryVoltage,
+      charging: charging ?? this.charging,
     );
   }
 
@@ -155,6 +159,7 @@ class LedUiSideState {
           : fallback.outputEnabled,
       batteryPercent: fallback.batteryPercent,
       batteryVoltage: fallback.batteryVoltage,
+      charging: fallback.charging,
     );
   }
 }
@@ -185,6 +190,7 @@ class LedUiState {
       outputEnabled: false,
       batteryPercent: 0,
       batteryVoltage: null,
+      charging: false,
     );
     return const LedUiState(a: defaultSide, b: defaultSide);
   }
@@ -322,7 +328,12 @@ class LedUiController extends StateNotifier<LedUiState> {
     });
   }
 
-  void setBatteryVoltage(StockSide side, double voltage, double percent) {
+  void setBatteryVoltage(
+    StockSide side,
+    double voltage,
+    double percent, {
+    bool charging = false,
+  }) {
     final clamped = percent.clamp(0.0, 1.0);
     _updateSide(
       side,
@@ -330,6 +341,7 @@ class LedUiController extends StateNotifier<LedUiState> {
         return sideState.copyWith(
           batteryVoltage: voltage,
           batteryPercent: clamped,
+          charging: charging,
         );
       },
       persist: false,

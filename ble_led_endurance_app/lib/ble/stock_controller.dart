@@ -573,16 +573,28 @@ class StockController extends StateNotifier<StockState> {
       if (data.isEmpty) {
         return null;
       }
-      final voltage = _parseVoltage(data);
-      final percent = _voltageToPercent(voltage);
+      final telemetry = _parseBatteryTelemetry(data);
+      final percent = _voltageToPercent(telemetry.voltage);
       _ref
           .read(ledUiProvider.notifier)
-          .setBatteryVoltage(side, voltage, percent);
-      return voltage;
+          .setBatteryVoltage(
+            side,
+            telemetry.voltage,
+            percent,
+            charging: telemetry.charging,
+          );
+      return telemetry.voltage;
     } catch (e, st) {
       _log.w('battery read failed', error: e, stackTrace: st);
       return null;
     }
+  }
+
+  ({double voltage, bool charging}) _parseBatteryTelemetry(List<int> raw) {
+    return (
+      voltage: _parseVoltage(raw),
+      charging: _parseCharging(raw),
+    );
   }
 
   double _parseVoltage(List<int> raw) {
@@ -621,6 +633,25 @@ class StockController extends StateNotifier<StockState> {
       return value / 100.0;
     }
     return value.toDouble();
+  }
+
+  bool _parseCharging(List<int> raw) {
+    if (!_looksLikeBinaryVoltagePayload(raw) || raw.length < 5) {
+      return false;
+    }
+    return (raw[4] & 0x01) != 0;
+  }
+
+  bool _looksLikeBinaryVoltagePayload(List<int> raw) {
+    if (raw.length < 4) {
+      return false;
+    }
+    final mv = (raw[2] & 0xFF) | ((raw[3] & 0xFF) << 8);
+    if (mv >= 500 && mv <= 7000) {
+      return true;
+    }
+    final rawAdc = (raw[0] & 0xFF) | ((raw[1] & 0xFF) << 8);
+    return rawAdc > 0 && rawAdc < 4096;
   }
 
   double _voltageToPercent(double voltage) {

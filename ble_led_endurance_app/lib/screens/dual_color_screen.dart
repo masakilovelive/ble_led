@@ -451,7 +451,10 @@ class _DualColorScreenState extends ConsumerState<DualColorScreen>
               margin: const EdgeInsets.symmetric(vertical: 10),
               color: Colors.white,
             ),
-            _BatteryRect(percent: sideUi.batteryPercent),
+            _BatteryRect(
+              percent: sideUi.batteryPercent,
+              isCharging: sideUi.charging,
+            ),
             Container(
               width: 96,
               height: 18,
@@ -1089,8 +1092,20 @@ class _BatteryPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        Text(
-          'Battery ${(sideUi.batteryPercent.clamp(0.0, 1.0) * 100).round()}%',
+        Row(
+          children: [
+            Text(
+              'Battery ${(sideUi.batteryPercent.clamp(0.0, 1.0) * 100).round()}%',
+            ),
+            if (sideUi.charging) ...[
+              const SizedBox(width: 6),
+              const Icon(
+                Icons.bolt_rounded,
+                color: Colors.amberAccent,
+                size: 18,
+              ),
+            ],
+          ],
         ),
       ],
     );
@@ -1154,8 +1169,12 @@ class _VerticalHsvSlider extends StatelessWidget {
 
 class _BatteryRect extends StatelessWidget {
   final double percent;
+  final bool isCharging;
 
-  const _BatteryRect({required this.percent});
+  const _BatteryRect({
+    required this.percent,
+    required this.isCharging,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1184,6 +1203,16 @@ class _BatteryRect extends StatelessWidget {
               ),
             ),
           ),
+          if (isCharging)
+            const Positioned(
+              top: 8,
+              right: 8,
+              child: Icon(
+                Icons.bolt_rounded,
+                color: Colors.amberAccent,
+                size: 20,
+              ),
+            ),
         ],
       ),
     );

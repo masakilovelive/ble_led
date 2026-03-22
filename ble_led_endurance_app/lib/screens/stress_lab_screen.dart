@@ -965,6 +965,7 @@ class _StressLabScreenState extends ConsumerState<StressLabScreen> {
                     title: 'Stock A',
                     sideState: stockState.a,
                     batteryVoltage: ledUiState.a.batteryVoltage,
+                    isCharging: ledUiState.a.charging,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -973,6 +974,7 @@ class _StressLabScreenState extends ConsumerState<StressLabScreen> {
                     title: 'Stock B',
                     sideState: stockState.b,
                     batteryVoltage: ledUiState.b.batteryVoltage,
+                    isCharging: ledUiState.b.charging,
                   ),
                 ),
               ],
@@ -1460,11 +1462,13 @@ class _DevicePanel extends StatelessWidget {
     required this.title,
     required this.sideState,
     required this.batteryVoltage,
+    required this.isCharging,
   });
 
   final String title;
   final StockSideState sideState;
   final double? batteryVoltage;
+  final bool isCharging;
 
   @override
   Widget build(BuildContext context) {
@@ -1487,9 +1491,21 @@ class _DevicePanel extends StatelessWidget {
             style: TextStyle(color: _connectionColor(sideState.status)),
           ),
           const SizedBox(height: 4),
-          Text(
-            'Battery: ${batteryVoltage?.toStringAsFixed(3) ?? '--'} V',
-            style: const TextStyle(color: Colors.white70),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Battery: ${batteryVoltage?.toStringAsFixed(3) ?? '--'} V',
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ),
+              if (isCharging)
+                const Icon(
+                  Icons.bolt_rounded,
+                  color: Colors.amberAccent,
+                  size: 18,
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
