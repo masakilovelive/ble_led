@@ -1,0 +1,92 @@
+現状の加速度に関する追加仕様の場合について
+
+更新日: 2026-03-26
+確認対象リポジトリ: https://github.com/masakilovelive/ble_led
+確認対象ブランチ/HEAD: main / 2eac110c2818a1dfccaa2531dfa632af0140cef7
+
+1. 現状確認
+
+- MG24 側には加速度モードの実装がある。
+- ESP32C6 側にも CMD_ACCEL_MODE (0x06) と g_accel_mode の分岐はある。
+- ただし ESP32C6 側は MG24 と同じ IMU ベースの加速度モードにはなっていない。
+
+2. MG24 側の実装概要
+
+- 参照候補:
+  - arduino/xiao_mg24_ble_d9_front.ino
+  - arduino/xiao_mg24_ble_alert_led.ino
+- MG24 側は Wire.h / LSM6DS3.h を利用して IMU を初期化している。
+- imu.begin(), readFloatAccelX(), readFloatAccelY(), readFloatAccelZ() を使って加速度を読んでいる。
+- update_accel_effect() 内で傾きや加速度量をもとに色や表示状態を更新している。
+- つまり MG24 の「加速度モード」は、実際にセンサー値へ反応するモードである。
+
+3. ESP32C6 側の現状実装
+
+- 参照対象:
+  - ble_led_app/ver1_esp32c6_stock1/ver1_esp32c6_stock1.ino
+  - ble_led_endurance_app/ver1_esp32c6_stock1/ver1_esp32c6_stock1.ino
+- 上記 2 ファイルは確認時点で同一内容だった。
+- ESP32C6 側にも CMD_ACCEL_MODE (0x06) の受信処理はある。
+- ただし accel mode 有効時に呼ばれているのは update_fixed_effect() であり、固定色をブリージング表示しているだけである。
+- ESP32C6 側のファームには MG24 側のような IMU 初期化や readFloatAccelX/Y/Z() は入っていない。
+- したがって「同名コマンドはあるが、MG24 と同等の加速度モードは未実装」という整理になる。
+
+4. 追加仕様として ESP32C6 に MG24 相当の加速度モードを入れる場合
+
+- 前提として、標準の XIAO ESP32C6 では IMU が前提になっていないため、真の加速度モードには外付け IMU が必要になる可能性が高い。
+- 追加候補センサーは MG24 側と合わせて LSM6DS3 が扱いやすい。
+- XIAO ESP32C6 の I2C は D4=SDA, D5=SCL の利用を想定できる。
+
+5. 追加実装が必要な内容
+
+- ハード:
+  - XIAO ESP32C6 に外付け IMU を接続する。
+  - 3.3V, GND, SDA, SCL の配線を行う。
+- ファーム:
+  - ESP32C6 ファームへ Wire.h と LSM6DS3.h を追加する。
+  - imu_begin(), imu_read(), update_accel_effect() を追加する。
+  - setup() 時に IMU 初期化を行い、初期化結果を保持する。
+  - CMD_ACCEL_MODE 受信時に、IMU 利用可否を見て accel mode の ON/OFF を制御する。
+  - 現在 update_fixed_effect() を呼んでいる箇所を update_accel_effect() ベースへ置き換える。
+- UI / アプリ:
+  - ble_led_app/lib/ble/led_controller.dart には setAccelMode() が既にあるため、BLE コマンド仕様は大きく変えなくてよい。
+  - 一方で画面上は "Enable IMU-based color change" と見えるため、非対応機種では表示や説明の調整をした方がよい。
+  - capability 判定を入れて、非対応機種では accel UI を隠すか無効化する案がある。
+
+6. 実装方針のおすすめ
+
+- 方針 A: ESP32C6 を本当に MG24 相当にする
+  - 外付け IMU を追加する。
+  - MG24 の IMU 関連処理のみを ESP32C6 ファームへ移植する。
+  - BLE スタックや LED ドライバ全体は移植せず、IMU 読み取りと accel effect の部分だけを取り込む。
+- 方針 B: 現状の ESP32C6 を維持する
+  - 現在の update_fixed_effect() を accel mode ではなく別名の演出モードとして扱う。
+  - UI 文言を IMU 前提に見えない表現へ修正する。
+  - 出荷検査や仕様書では、非対応機種は acceleration を SKIP 扱いにする。
+
+7. 実装時の注意点
+
+- ESP32C6 側のファームは 2 箇所に同内容があるため、片方だけ修正しないよう注意する。
+- accel mode OFF 時に元の色へ自然に戻るよう、通常色状態は保持したまま accel effect 中だけ直接 LED 出力を上書きする構成が扱いやすい。
+- rainbow / heartbeat / pattern / charge detect との排他制御は既存仕様に合わせて整理する必要がある。
+
+8. 現時点での結論
+
+- MG24 には実センサー連動の加速度モードがある。
+- ESP32C6 には accel mode コマンドの枠はあるが、中身は固定色ブリージングであり、MG24 同等ではない。
+- 追加仕様として ESP32C6 に MG24 相当を入れる場合は、外付け IMU 前提のハード追加とファーム移植が必要。
+
+参考リンク
+
+- リポジトリ:
+  https://github.com/masakilovelive/ble_led
+- MG24 の加速度処理参考:
+  https://github.com/masakilovelive/ble_led/blob/main/arduino/xiao_mg24_ble_d9_front.ino
+- ESP32C6 の現状 accel 実装:
+  https://github.com/masakilovelive/ble_led/blob/main/ble_led_app/ver1_esp32c6_stock1/ver1_esp32c6_stock1.ino
+- アプリ側 accel コマンド送信:
+  https://github.com/masakilovelive/ble_led/blob/main/ble_led_app/lib/ble/led_controller.dart
+- Seeed Studio XIAO ESP32C6 I2C ピン情報:
+  https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp32c6/
+- Seeed Studio XIAO MG24 Sense Built-in Sensor:
+  https://wiki.seeedstudio.com/xiao_mg24_sense_built_in_sensor/
