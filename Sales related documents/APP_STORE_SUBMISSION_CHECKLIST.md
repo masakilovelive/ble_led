@@ -1,4 +1,3 @@
-# septronics App Store 提出前チェック表
 
 最終更新: 2026-04-26
 
@@ -9,29 +8,29 @@
 
 ## 0. 最初に確定する項目
 
-- [ ] 正式アプリ名を確定する
+- [☑️] 正式アプリ名を確定する
   - 現在の iOS 表示名: `ScepTRONIC`
-  - 確定名:
-- [ ] 最終 Bundle ID を確定する
+  - 確定名:`ScepTRONIC`
+- [☑️] 最終 Bundle ID を確定する
   - 現在: `com.masacookie.septronics`
-  - 確定値:
-- [ ] App Store の販売者名を確認する
+  - 確定値:`com.FAE.ScepTRONIC`
+- [☑️] App Store の販売者名を確認する
   - Apple Developer アカウント種別:
   - App Store 上の表示名:
-- [ ] Privacy Policy URL を用意する
-  - URL:
-- [ ] サポート URL を用意する
-  - URL:
-- [ ] 必要なら利用規約 URL を用意する
-  - URL:
-- [ ] iPad 対応を残すか決める
+- [☑️] Privacy Policy URL を用意する
+  - URL:https://github.com/Fortuna-Advanced-Engineering
+- [☑️] サポート URL を用意する
+  - URL:https://thebase.com/inquiry/sceptronic-base-shop?_gl=1*gqi4xr*_gcl_au*MTQ5NDQ1MzY4OC4xNzc3MjAxNTkx*_ga*MTcyMDQ1OTY2MS4xNzc3MjAxNTkx*_ga_574HL6KGKQ*czE3NzcyMDE1OTEkbzEkZzAkdDE3NzcyMDE1OTQkajU3JGwwJGgw
+- [☑️] 必要なら利用規約 URL を用意する
+  - URL:none
+- [☑️] iPad 対応を残すか決める
   - 現状は iPhone / iPad 両対応
-  - 方針:
+  - 方針:iPhone only
 
 ## 1. 現在のプロジェクト情報
 
 - App 名表示: `ScepTRONIC`
-- Bundle ID: `com.masacookie.septronics`
+- Bundle ID: `com.FAE.ScepTRONIC`
 - Version: `0.1.4+5`
 - Bluetooth 権限説明: 設定済み
 - Local Network 権限説明: 設定済み
@@ -47,9 +46,9 @@
 
 ## 2. Apple Developer Program 参加確認
 
-- [ ] Apple Developer Program に加入済み
-- [ ] App Store Connect にログインできる
-- [ ] 2ファクタ認証付き Apple Account で運用できる
+- [☑️] Apple Developer Program に加入済み
+- [☑️] App Store Connect にログインできる
+- [☑️] 2ファクタ認証付き Apple Account で運用できる
 - [ ] 必要な Team を選べる
 
 ## 3. Bundle ID 確定
@@ -255,4 +254,6 @@ If needed, we can provide additional review instructions.
 - [ ] サポート URL
 - [ ] iPad 対応を残すかどうか
 - [ ] App Privacy 回答内容
+
+
 
