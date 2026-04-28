@@ -6,7 +6,7 @@
 
 ## 1. 事業者情報
 
-- 事業者名: `Fortuna Advanced Engineering`
+- 事業者名: `ScepTRONIC`
 - お問い合わせ先: `fae.info@faeosaka.com`
 
 ## 2. 本アプリの概要
