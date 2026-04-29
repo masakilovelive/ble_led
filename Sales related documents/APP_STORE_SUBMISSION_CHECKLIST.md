@@ -97,9 +97,9 @@
 
 確認メモ:
 
-- 確認端末:
+- 確認端末:`a4os5nのiPhone`
 - iOS バージョン:
-- 確認者:
+- 確認者:`masacookie`
 
 ## 7. TestFlight / App Store 用ビルドをアップロード
 
