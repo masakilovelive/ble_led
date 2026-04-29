@@ -103,17 +103,17 @@
 
 ## 7. TestFlight / App Store 用ビルドをアップロード
 
-- [ ] ビルド対象を `Any iOS Device (arm64)` に変更する
-- [ ] `Product > Archive` を実行する
-- [ ] Archive 完了後、`Distribute App` を押す
-- [ ] `TestFlight & App Store` を選ぶ
-- [ ] 配布設定を確認してアップロードする
-- [ ] アップロード完了を確認する
+- [☑️ ] ビルド対象を `Any iOS Device (arm64)` に変更する
+- [☑️ ] `Product > Archive` を実行する
+- [☑️ ] Archive 完了後、`Distribute App` を押す
+- [☑️ ] `TestFlight & App Store` を選ぶ
+- [☑️ ] 配布設定を確認してアップロードする
+- [☑️ ] アップロード完了を確認する
 
 アップロード記録:
 
-- Build version:
-- Upload 日時:
+- Build version: 0.1.4.6
+- Upload 日時: 2026/04/29
 
 ## 8. App Store Connect の一般情報を入力
 
