@@ -49,28 +49,29 @@
 - [☑️] Apple Developer Program に加入済み
 - [☑️] App Store Connect にログインできる
 - [☑️] 2ファクタ認証付き Apple Account で運用できる
-- [ ] 必要な Team を選べる
+- [☑️ ] 必要な Team を選べる
+- 確定Team:`Masaki Hayashi`
 
 ## 3. Bundle ID 確定
 
-- [ ] 公開用 Bundle ID を最終決定する
-- [ ] App Store Connect にアプリ作成する前に決め切る
-- [ ] Apple Developer の Identifiers で使用可能か確認する
-- [ ] 既存の App Store Connect レコードと衝突しないことを確認する
+- [☑️] 公開用 Bundle ID を最終決定する
+- [☑️] App Store Connect にアプリ作成する前に決め切る
+- [☑️] Apple Developer の Identifiers で使用可能か確認する
+- [☑️] 既存の App Store Connect レコードと衝突しないことを確認する
 
 メモ:
 
-- 確定 Bundle ID:
-- 確認日:
+- 確定 Bundle ID:`com.FAE.ScepTRONIC`
+- 確認日:2026/04/29
 
 ## 4. 証明書とプロビジョニング確認
 
-- [ ] Xcode の `Signing & Capabilities` を開く
-- [ ] `Automatically manage signing` にチェックが入っている
-- [ ] Team が正しい
-- [ ] Provisioning Profile が有効
-- [ ] Signing Certificate が有効
-- [ ] 警告やエラーが出ていない
+- [☑️] Xcode の `Signing & Capabilities` を開く
+- [☑️ ] `Automatically manage signing` にチェックが入っている
+- [☑️ ] Team が正しい
+- [☑️ ] Provisioning Profile が有効
+- [☑️ ] Signing Certificate が有効
+- [☑️ ] 警告やエラーが出ていない
 
 ## 5. アプリ側設定の反映
 
