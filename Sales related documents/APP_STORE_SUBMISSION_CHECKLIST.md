@@ -18,7 +18,7 @@
   - Apple Developer アカウント種別:
   - App Store 上の表示名:
 - [☑️] Privacy Policy URL を用意する
-  - URL:https://github.com/Fortuna-Advanced-Engineering
+  - URL:[https://github.com/Fortuna-Advanced-Engineering](https://github.com/Fortuna-Advanced-Engineering/ScepTRONIC/tree/main)
 - [☑️] サポート URL を用意する
   - URL:https://thebase.com/inquiry/sceptronic-base-shop?_gl=1*gqi4xr*_gcl_au*MTQ5NDQ1MzY4OC4xNzc3MjAxNTkx*_ga*MTcyMDQ1OTY2MS4xNzc3MjAxNTkx*_ga_574HL6KGKQ*czE3NzcyMDE1OTEkbzEkZzAkdDE3NzcyMDE1OTQkajU3JGwwJGgw
 - [☑️] 必要なら利用規約 URL を用意する
