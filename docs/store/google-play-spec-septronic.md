@@ -1,8 +1,8 @@
 ﻿# ScepTRONIC Android アプリ仕様説明書（Google Play 提出用）
 
-最終更新日: 2026-04-29  
+最終更新日: 2026-08-23
 対象アプリ: `ScepTRONIC`  
-Android package name: `com.masacookie.sceptronic`
+Android package name: `com.FAE.ScepTRONIC`
 対象バージョン: `0.1.4+5`
 
 ## 1. アプリの目的

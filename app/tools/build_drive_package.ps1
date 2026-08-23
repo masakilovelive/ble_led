@@ -221,7 +221,7 @@ $manifestBody = @(
     "app: septronics",
     "version: $version",
     "build: $mode",
-    "package_name: com.masacookie.sceptronic",
+    "package_name: com.FAE.ScepTRONIC",
     "generated_at: $timestamp",
     "apk_file: $apkName",
     "release_debug_content_removed: $($isRelease.ToString().ToLowerInvariant())"

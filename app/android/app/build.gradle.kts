@@ -10,7 +10,7 @@ dependencies {
 }
 
 android {
-    namespace = "com.masacookie.sceptronic"
+    namespace = "com.FAE.ScepTRONIC"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -24,7 +24,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.masacookie.sceptronic"
+        applicationId = "com.FAE.ScepTRONIC"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

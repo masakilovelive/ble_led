@@ -1,4 +1,4 @@
-package com.masacookie.sceptronic
+package com.FAE.ScepTRONIC
 
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity

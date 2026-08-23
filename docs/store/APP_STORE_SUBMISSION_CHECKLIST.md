@@ -1,7 +1,7 @@
 
-最終更新: 2026-04-26
+最終更新: 2026-08-23
 
-> 現行製品ソース（2026-08-23確認）の正式Bundle IDは `com.masacookie.sceptronic`。本文中の `com.FAE.ScepTRONIC` は過去の提出記録として残す。
+> App Store Connectで確認した正式Bundle IDは `com.FAE.ScepTRONIC`（Apple ID `6764564058`）。現行iOSソースもこのIDに一致させる。
 
 このチェック表は、以下の記事の流れに合わせて `septronics` 向けに整理したものです。
 
@@ -14,7 +14,7 @@
   - 現在の iOS 表示名: `ScepTRONIC`
   - 確定名:`ScepTRONIC`
 - [☑️] 最終 Bundle ID を確定する
-  - 現在: `com.masacookie.septronics`
+  - 現在: `com.FAE.ScepTRONIC`
   - 確定値:`com.FAE.ScepTRONIC`
 - [☑️] App Store の販売者名を確認する
   - Apple Developer アカウント種別:
