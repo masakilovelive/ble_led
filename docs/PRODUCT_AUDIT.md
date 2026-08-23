@@ -9,7 +9,7 @@
 採用根拠:
 
 - `septronics/dist/` に2026-04-27作成のdebug/release APKと配布zipがある。
-- Android製品IDは `com.masacookie.sceptronic`、iOS Bundle IDはApp Store Connect登録済みの `com.FAE.ScepTRONIC` である。
+- Android製品IDとiOS Bundle IDは `com.FAE.ScepTRONIC` に統一している。
 - 表示名、ブランド画像、App Store資料が `ScepTRONIC` と一致する。
 - C3/C6製品ファームウェアを含む配布zip作成ツールがある。
 - 2026-05-05までアプリ、アイコン、出荷検査、配布ツールが更新されている。
@@ -38,5 +38,6 @@
 | 2026-05-05時点のAndroidソース | `com.masacookie.sceptronic` | `app/android/app/build.gradle.kts` |
 | 2026-05-05時点のiOSソース | `com.masacookie.sceptronic` | Xcode project設定 |
 | App Store Connect登録済みiOSアプリ | `com.FAE.ScepTRONIC` | App Store Connectアプリ情報（Apple ID `6764564058`） |
+| 2026-08-23確定のAndroid/iOS製品ID | `com.FAE.ScepTRONIC` | Android/iOSの現行製品ソース |
 
-2026-08-23のApp Store Connect確認により、iOSの正式Bundle IDは既存アプリに登録済みの `com.FAE.ScepTRONIC` と確定した。iOSソースをこのIDへ合わせ、Android application IDは `com.masacookie.sceptronic`、macOS bundle IDも `com.masacookie.sceptronic` のままとする。過去IDは配布・提出履歴との照合用に保持する。
+2026-08-23の確認により、Android application IDとiOS Bundle IDは `com.FAE.ScepTRONIC` に統一した。macOS bundle IDは `com.masacookie.sceptronic` のままとする。過去IDは配布・提出履歴との照合用に保持する。Google Playへ旧IDのAPK/AABを登録済みの場合は別アプリ扱いになるため、公開前にPlay Consoleの登録状況を確認する。

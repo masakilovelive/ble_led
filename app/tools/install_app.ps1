@@ -3,7 +3,7 @@ param(
     [ValidateSet("debug", "release")]
     [string]$BuildMode = "debug",
     [string]$ApkPath = "",
-    [string]$PackageName = "com.masacookie.sceptronic",
+    [string]$PackageName = "com.FAE.ScepTRONIC",
     [string]$DeviceSerial = "",
     [switch]$Launch
 )
