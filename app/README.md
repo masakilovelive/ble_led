@@ -6,7 +6,8 @@ Consolidated Flutter app for the Sceptronic BLE stock-control workflow.
 
 - App display name: `ScepTRONIC`
 - Android package name: `com.masacookie.sceptronic`
-- iOS/macOS bundle id: `com.masacookie.sceptronic`
+- iOS bundle id: `com.FAE.ScepTRONIC`
+- macOS bundle id: `com.masacookie.sceptronic`
 
 This is the canonical Flutter app for the ScepTRONIC product and includes:
 
