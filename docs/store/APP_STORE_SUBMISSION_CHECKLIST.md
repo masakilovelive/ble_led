@@ -1,6 +1,8 @@
 
 最終更新: 2026-04-26
 
+> 現行製品ソース（2026-08-23確認）の正式Bundle IDは `com.masacookie.sceptronic`。本文中の `com.FAE.ScepTRONIC` は過去の提出記録として残す。
+
 このチェック表は、以下の記事の流れに合わせて `septronics` 向けに整理したものです。
 
 - Zenn: https://zenn.dev/shusuke_bridge/articles/b5debb31e857d2

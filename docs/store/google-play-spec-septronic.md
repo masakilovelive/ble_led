@@ -2,7 +2,7 @@
 
 最終更新日: 2026-04-29  
 対象アプリ: `ScepTRONIC`  
-Android package name: `com.masacookie.septronics`  
+Android package name: `com.masacookie.sceptronic`
 対象バージョン: `0.1.4+5`
 
 ## 1. アプリの目的

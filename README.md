@@ -11,7 +11,7 @@ ScepTRONIC BLE LED製品のアプリ、製品ファームウェア、製造・�
 - App Store提出記録: `com.FAE.ScepTRONIC`
 - Flutter version: `0.1.4+5`
 
-Androidの配布済みID、現在ソースのID、App Store提出IDが一致していません。既存アプリの更新継続可否に関わるため、リリース前に使用するIDを確定してください。このブランチでは現在ソースのIDを維持しています。
+最新の正式アプリ情報は現在ソースを基準とし、Android/iOSともに `com.masacookie.sceptronic` を採用します。配布済みAPKと過去のApp Store提出記録にある別IDは、変更履歴の確認用として資料に残しています。
 
 ## ディレクトリ
 

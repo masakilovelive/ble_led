@@ -30,7 +30,7 @@
 
 除外した資産は元の作業ディレクトリおよび既存Git履歴に残し、この製品ブランチでは削除しない。
 
-## 製品IDの未解決事項
+## 製品IDの履歴と採用決定
 
 | 対象 | 確認できたID | 根拠 |
 | --- | --- | --- |
@@ -39,4 +39,4 @@
 | 2026-05-05時点のiOSソース | `com.masacookie.sceptronic` | Xcode project設定 |
 | App Store提出チェックリスト | `com.FAE.ScepTRONIC` | `docs/store/APP_STORE_SUBMISSION_CHECKLIST.md` |
 
-同じストアアプリを更新する場合、既存のapplication ID / bundle IDは原則として維持する必要がある。GitHubへ製品ブランチを公開してもよいが、次のストアビルド前にAndroidとiOSそれぞれの正式IDを確定する。
+2026-08-23の確認により、最新の正式アプリ情報は現在ソースを基準とすることを決定した。Android application IDとiOS/macOS bundle IDは `com.masacookie.sceptronic` を採用する。過去IDは配布・提出履歴との照合用に保持する。

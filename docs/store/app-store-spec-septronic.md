@@ -2,7 +2,7 @@
 
 最終更新日: 2026-04-30  
 対象アプリ: `ScepTRONIC`  
-iOS bundle identifier（現行コード）: `com.masacookie.septronics`  
+iOS bundle identifier（現行コード）: `com.masacookie.sceptronic`
 対象バージョン: `0.1.4+5`
 
 ## 1. アプリの目的
@@ -116,7 +116,7 @@ iOS bundle identifier（現行コード）: `com.masacookie.septronics`
 - 本アプリは専用 BLE ハードウェア制御アプリであり、ハードウェア非接続時は一部機能が利用できません。
 - ログイン不要で基本機能を使用可能です。
 - `SEPTRONICS_RELEASE_BUILD=1` 前提で、検査/デバッグ向け UI を無効化した提出構成を想定します。
-- Bundle ID は現行コードで `com.masacookie.septronics` です。提出時に別 ID を使用する場合は Xcode 側設定の最終確認が必要です。
+- Bundle ID は現行コードで `com.masacookie.sceptronic` です。
 
 ## 9. 問い合わせ先
 
