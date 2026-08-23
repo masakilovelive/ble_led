@@ -1,0 +1,452 @@
+Process Record Spec - 2026-03-18
+
+1. Goal
+
+This document defines the process-record sheet structure for:
+
+- #9 shipment inspection
+- #10 assembly/process record
+
+The goal is to make one record model that can track:
+
+- unit identity
+- assembly progress
+- inspection result
+- BLE test evidence
+- rework history
+
+2. Recommended record model
+
+Use one row per:
+
+- serial number
+- process step
+- execution attempt
+
+Primary key:
+
+- serial_no
+- process_code
+- attempt_no
+
+3. Recommended columns
+
+3.1 Identity columns
+
+- serial_no
+  Display label: Serial No
+  Type: text
+  Required: always
+  Source: manual or barcode scan
+
+- board_id
+  Display label: Board ID
+  Type: text
+  Required: assembly and inspection
+  Source: manual
+
+- lot_no
+  Display label: Lot No
+  Type: text
+  Required: recommended
+  Source: manual
+
+- ble_name
+  Display label: BLE Name
+  Type: text
+  Required: BLE inspection
+  Source: auto or manual
+
+- mac_address
+  Display label: MAC Address
+  Type: text
+  Required: BLE inspection
+  Source: auto
+
+3.2 Process columns
+
+- owner_role
+  Display label: Tantou
+  Type: dropdown
+  Required: always
+  Values:
+  - manufacturing
+  - electrical_inspection
+  - shipment
+
+- process_group
+  Display label: Kouteimei
+  Type: dropdown
+  Required: always
+  Values:
+  - assembly
+  - shipment_inspection_android
+  - shipment_inspection_iphone
+  - packaging
+  - rework
+
+- process_code
+  Display label: Koutei code
+  Type: text
+  Required: always
+  Values example:
+  - fw_write
+  - mac_register
+  - bt_connect_android
+  - feature_check_android
+  - bond_clear_android
+  - bt_connect_iphone
+  - feature_check_iphone
+  - bond_clear_iphone
+  - semi_finished_check
+  - potting
+  - assembly
+  - final_bt_check
+  - packing
+
+- process_title
+  Display label: Koutei naiyou
+  Type: text
+  Required: always
+  Source: fixed master or dropdown
+
+- process_detail
+  Display label: Shousai
+  Type: long text
+  Required: recommended
+  Source: manual
+
+- drawing_ref
+  Display label: Koutei zumen
+  Type: text or URL
+  Required: optional
+  Source: manual
+
+3.3 Result columns
+
+- status
+  Display label: Status
+  Type: dropdown
+  Required: always
+  Values:
+  - not_started
+  - in_progress
+  - pass
+  - fail
+  - blocked
+  - skipped
+
+- judge
+  Display label: Judge
+  Type: dropdown
+  Required: shipment inspection
+  Values:
+  - pass
+  - fail
+  - pending
+
+- ng_class
+  Display label: NG Class
+  Type: dropdown
+  Required: when fail
+  Values example:
+  - adv_not_found
+  - connect_failed
+  - led_write_fail
+  - battery_read_fail
+  - boot_fail
+  - visual_defect
+  - assembly_defect
+  - other
+
+- ng_detail
+  Display label: NG Detail
+  Type: long text
+  Required: when fail
+  Source: auto or manual
+
+- note
+  Display label: Biko
+  Type: long text
+  Required: optional
+  Source: manual
+
+3.4 Version and environment columns
+
+- fw_version
+  Display label: FW Version
+  Type: text
+  Required: FW write and inspection
+  Source: auto or manual
+
+- app_version
+  Display label: App Version
+  Type: text
+  Required: app inspection
+  Source: auto or manual
+
+- mcu_version
+  Display label: MCU Version
+  Type: text
+  Required: MCU runner inspection
+  Source: auto or manual
+
+- phone_type
+  Display label: Phone Type
+  Type: dropdown
+  Required: phone-based inspection
+  Values:
+  - android
+  - iphone
+  - windows_pc
+
+- tester_name
+  Display label: Tester
+  Type: text
+  Required: always
+  Source: manual
+
+3.5 Timing columns
+
+- started_at
+  Display label: Start Time
+  Type: datetime
+  Required: recommended
+  Source: auto or manual
+
+- finished_at
+  Display label: Finish Time
+  Type: datetime
+  Required: on completion
+  Source: auto or manual
+
+- attempt_no
+  Display label: Attempt No
+  Type: integer
+  Required: always
+  Source: auto or manual
+
+3.6 Test evidence columns
+
+- rssi_a_dbm
+  Display label: RSSI A
+  Type: number
+  Required: BLE inspection when available
+  Source: auto
+
+- rssi_b_dbm
+  Display label: RSSI B
+  Type: number
+  Required: syncro or dual inspection when available
+  Source: auto
+
+- battery_a_v
+  Display label: Battery A
+  Type: number
+  Required: battery inspection when available
+  Source: auto
+
+- battery_b_v
+  Display label: Battery B
+  Type: number
+  Required: battery inspection when available
+  Source: auto
+
+- feature_set
+  Display label: Feature Set
+  Type: text
+  Required: feature inspection
+  Example:
+  - color
+  - heartbeat
+  - rainbow
+  - syncro
+  - feature_transition
+
+- report_path
+  Display label: Report Path
+  Type: text or URL
+  Required: auto-test execution
+  Source: auto
+
+- report_id
+  Display label: Report ID
+  Type: text
+  Required: auto-test execution
+  Source: auto
+
+3.7 Rework columns
+
+- rework_flag
+  Display label: Rework
+  Type: dropdown
+  Required: recommended
+  Values:
+  - no
+  - yes
+
+- rework_detail
+  Display label: Rework Detail
+  Type: long text
+  Required: when rework_flag=yes
+
+- previous_serial_state
+  Display label: Previous State
+  Type: text
+  Required: optional
+  Source: manual or derived
+
+4. Current process mapping from the sheet
+
+Recommended normalized process map:
+
+- fw_write
+  Current meaning: FW write by MCU jig
+
+- mac_register
+  Current meaning: register device name or MAC mapping
+
+- bt_connect_android
+  Current meaning: Android app scan/connect check
+
+- feature_check_android
+  Current meaning: syncro, simple, rainbow, acceleration, heartbeat, battery
+
+- bond_clear_android
+  Current meaning: remove registered device information after test
+
+- bt_connect_iphone
+  Current meaning: iPhone app scan/connect check
+
+- feature_check_iphone
+  Current meaning: iPhone feature verification
+
+- bond_clear_iphone
+  Current meaning: remove registered device information after test
+
+- semi_finished_check
+  Current meaning: semi-finished unit check
+
+- potting
+  Current meaning: potting process
+
+- assembly
+  Current meaning: final assembly
+
+- final_bt_check
+  Current meaning: final Bluetooth reconnect check after assembly
+
+- packing
+  Current meaning: final packing
+
+5. Input rules
+
+- serial_no is mandatory in every row
+- process_code is mandatory in every row
+- status is mandatory in every row
+- finished_at is mandatory when status is pass or fail
+- ng_class and ng_detail are mandatory when status is fail
+- report_path is mandatory for auto-run inspections
+- rssi_a_dbm is mandatory for Android and PC BLE connect checks
+- battery_a_v is mandatory for feature checks that include battery
+- fw_version is mandatory after fw_write
+- app_version is mandatory for app-driven inspection rows
+
+6. Source of truth
+
+Recommended ownership:
+
+- Google Sheet:
+  Source of truth for manufacturing history, human workflow, and shipment status
+
+- Android endurance app:
+  Source of truth for stress-run CSV and per-case BLE evidence
+
+- Python GUI:
+  Source of truth for Windows-side endurance CSV and sequence event logs
+
+- Firmware:
+  Source of truth for device behavior and serial event output
+
+Rule:
+
+- The sheet stores summary and links
+- CSV files store raw evidence
+
+7. Data write policy
+
+Manual write:
+
+- tester_name
+- owner_role
+- process_group
+- process_detail
+- drawing_ref
+- note
+- rework_detail
+
+Automatic write from Android app:
+
+- started_at
+- finished_at
+- app_version
+- ble_name
+- mac_address
+- rssi_a_dbm
+- rssi_b_dbm
+- battery_a_v
+- battery_b_v
+- feature_set
+- report_path
+- report_id
+- judge
+- ng_class
+- ng_detail
+
+Automatic write from Python GUI:
+
+- started_at
+- finished_at
+- ble_name
+- rssi_a_dbm
+- rssi_b_dbm
+- battery_a_v
+- battery_b_v
+- report_path
+- report_id
+- judge
+- ng_class
+- ng_detail
+
+8. Recommended implementation order
+
+1. Freeze sheet column names
+2. Add mandatory/dropdown rules in the sheet
+3. Map current Android CSV fields to the sheet fields
+4. Map current Python GUI CSV fields to the sheet fields
+5. Decide whether updates are manual copy, CSV import, or API sync
+6. Start with shipment inspection rows before full assembly automation
+
+9. Short-term practical minimum
+
+If the team wants to start immediately, the minimum required columns are:
+
+- serial_no
+- board_id
+- process_code
+- process_title
+- status
+- judge
+- tester_name
+- started_at
+- finished_at
+- fw_version
+- app_version
+- ble_name
+- mac_address
+- rssi_a_dbm
+- battery_a_v
+- report_path
+- ng_class
+- ng_detail
+- note

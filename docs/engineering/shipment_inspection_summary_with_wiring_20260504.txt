@@ -1,0 +1,155 @@
+﻿出荷検査まとめ（配線含む）
+作成日: 2026-05-04
+対象: BLE LED 製品（Stock A / Stock B）
+
+0. 根拠ファイル
+- docs/engineering/shipment_inspection_spec_20260320.md
+- app/lib/ble/shipment_inspection_controller.dart
+- app/lib/screens/shipment_inspection_screen.dart
+- manufacturing/firmware/uno_endurance_mcu_auto/uno_endurance_mcu_auto.ino
+- manufacturing/tools/start_mcu_android_bridge.ps1
+- manufacturing/tools/mcu_android_bridge.py
+
+1. 目的
+- 出荷前に BLE 接続品質、LED機能、battery、再起動相当動作、記録項目を統一手順で判定する。
+- Android 実装を基準にし、将来の iPhone 実装でも同じ検査順・判定基準を維持する。
+
+2. 使用機材
+- Android端末（出荷検査アプリ: ScepTRONIC debug build）
+- 検査対象機 2台（Stock A / Stock B）
+- Arduino UNO（MCU Runner: uno_endurance_mcu_auto）
+- 治具電源制御回路（UNOのD5/D6/D7を受ける側）
+- センサ入力（UNO D12/D13）
+- PC（Bridge利用時）
+- USBケーブル / OTGケーブル
+
+3. 接続構成
+3.1 PC Bridge構成（標準）
+Android App -> (adb reverse) -> PC Bridge (Python) -> COMポート -> UNO -> 治具 -> Stock A/B
+
+起動コマンド:
+- ポート一覧
+  powershell -ExecutionPolicy Bypass -File .\manufacturing\tools\start_mcu_android_bridge.ps1 -ListPorts
+- Bridge起動
+  powershell -ExecutionPolicy Bypass -File .\manufacturing\tools\start_mcu_android_bridge.ps1 -ComPort COM4 -ListenPort 9876
+
+アプリ設定:
+- Transport: PC Bridge
+- Host: 127.0.0.1
+- Port: 9876
+
+3.2 USB OTG構成
+Android App -> USB OTG -> UNO -> 治具 -> Stock A/B
+
+アプリ設定:
+- Transport: USB OTG
+- USBデバイス選択後に Connect MCU
+
+4. 治具配線（UNO基準）
+4.1 UNOピン割当（実装値）
+- D6: PIN_PWR_A（Stock A系の電源制御信号）
+- D7: PIN_PWR_B（Stock B系の電源制御信号）
+- D5: PIN_START_PULSE（起動パルス信号）
+- D12: PIN_SENSOR_A（センサ入力A）
+- D13: PIN_SENSOR_B（センサ入力B）
+- D9: X9C_A_INC（任意・X9C制御）
+- D8: X9C_A_UD（任意・X9C制御）
+- D10: X9C_A_CS（任意・X9C制御）
+
+4.2 配線時の注意
+- UNO GNDと治具側GNDは必ず共通化する。
+- D5/D6/D7は「制御信号」として使用し、実電源切替は治具側のリレー/MOSFET回路で受ける。
+- 実機の極性は `POWER_ACTIVE_HIGH=true`, `START_PULSE_ACTIVE_HIGH=true` 前提。
+- センサ入力極性は `SENSOR_ON_LEVEL_HIGH=true` 前提。
+
+4.3 MCUコマンド（UNO）
+- boot: D6/D7 ON -> 待機 -> D5パルス
+- poff: A/B電源OFF
+- r: 状態表示
+
+5. 検査前チェック
+- Androidで BLE権限許可済み（Bluetooth Scan / Connect / Location）
+- Bluetooth Setupで A/B 登録済み
+- Pair番号整合（奇数=A、偶数=B）
+- MCU Runner使用時、Bridge host/port が有効、または USB OTGでUNO接続済み
+- 治具配線と電源が正常
+
+6. 出荷検査フロー（11項目）
+1) BLE接続確認（自動）
+- scan/connectを実行
+- 合格: 接続成功、RSSI下限以上、規定リトライ内
+
+2) LED色確認（目視）
+- R/G/B/Whiteを順表示
+- 合格: 欠色なし
+
+3) heartbeat確認（目視）
+- 合格: 5秒以上正常点滅
+
+4) rainbow確認（目視）
+- 合格: 1サイクル以上連続動作
+
+5) battery電圧読み取り（自動）
+- 合格: A/B読取成功かつ下限以上
+
+6) アプリ再起動相当（自動）
+- 実際は MCU power cycle（poff -> boot -> settle）
+- 合格: poff/bootイベント完了
+
+7) 最終再接続確認（自動）
+- 再接続後にcolorコマンド再送確認
+- 合格: 再接続成功 + color 1回成功
+
+8) 最低起動電圧（目視）
+- 低電圧治具条件で起動確認
+- 合格: 規定下限で起動（対象外はSKIP可）
+
+9) 記録確認（自動）
+- 必須フィールド確認
+- 合格: 欠落なし
+
+10) 外観検査（目視）
+- 傷/汚れ/実装異常/発光異常確認
+- 合格: 不良なし
+
+11) acceleration確認（目視）
+- 合格: 規定反応が発生
+- ESP32-C3等の非対応機種はSKIP運用可
+
+7. 既定しきい値（現行）
+- 接続タイムアウト: 6秒
+- 接続リトライ: 1回
+- RSSI下限: -90 dBm
+- MCU boot settle: 3000 ms
+- battery下限: 1.6 V
+- 最低起動電圧判定値: 1.6 V（運用固定可）
+
+8. 主なNG分類（運用上よく使うもの）
+- ADV_NOT_FOUND
+- RSSI_BELOW_LIMIT
+- CONNECT_FAILED
+- GATT_VERIFY_FAIL
+- BATTERY_READ_FAIL
+- BATTERY_BELOW_LIMIT
+- MCU_NOT_READY
+- MCU_POWEROFF_TIMEOUT
+- MCU_BOOT_TIMEOUT
+- RECORD_FIELD_MISSING
+- OPERATOR_FAIL
+
+9. レポート出力
+- 保存先: documents/shipment_reports
+- 詳細JSON: shipment_report_YYYYMMDD_HHMMSS.json
+- 手順CSV: shipment_report_steps_YYYYMMDD_HHMMSS.csv
+- 主要記録:
+  report_id, serial_no, board_id, lot_no, tester_name,
+  fw_version, mcu_version, app_version,
+  mcu_transport_mode, mcu_endpoint,
+  ble_name_a/b, mac_a/b,
+  各ステップ status/detail/failure_class/duration,
+  rssi_a_dbm, rssi_b_dbm, battery_a_v, battery_b_v
+
+10. 運用注意点
+- 「最低起動電圧」はアプリ単体では実現できないため、必ず治具側で電圧条件を作る。
+- Bridge構成では `adb reverse` が前提。接続不良時は Bridge再起動とCOMポート再確認を行う。
+- 配線変更時は、まず UNO の `boot` / `poff` 単体操作で治具応答を確認してから本検査を開始する。

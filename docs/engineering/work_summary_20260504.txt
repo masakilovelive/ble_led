@@ -1,0 +1,83 @@
+﻿作業まとめ（作成日: 2026-05-04）
+
+対象リポジトリ:
+- C:\Users\user\OneDrive\文档\fixed_led_ble_2a06_package
+
+1. これまでの主な実施内容（コミット済み）
+
+2026-03-05
+- リポジトリ初期投入（Initial commit / initial import）
+- Androidアプリ作業スナップショット同期
+- App/FWのバージョン更新（0.1.1, 0.1.1+2, 0.1.2+3）
+
+2026-03-06
+- 耐久試験向けMCU自動化とX9Cコントローラスケッチ追加
+- iOS側の起動安定化（Dual control起動/オフライン色選択）
+- iOS Pod workspace / signing関連の統合
+
+2026-03-10
+- MCU endurance runnerとシーケンス資料追加
+
+2026-03-18
+- Android BLE endurance runner追加
+- テストサマリー/課題ワークプラン資料追加
+
+2026-03-20
+- Restart replay probeフロー追加
+- Shipment inspectionドラフト/MCU連携フロー/仕様書を追加
+
+2026-03-21
+- Heartbeatモード制御の不具合修正
+  - 再起動後のモード復元
+  - 制御責務のFW側移動
+
+2. 現在進行中の作業（未コミット差分）
+
+差分サマリ（git diffベース）
+- 変更ファイル: 36
+- 追加行: 1,877
+- 削除行: 541
+
+追加（staged）
+- ble_led_endurance_app/lib/ble/ble_permissions.dart（BLE権限管理追加）
+- ble_led_endurance_app/ver1_esp32c6_stock1/ver1_esp32c6_stock1.ino（FW追加）
+
+主な更新領域（modified）
+- ble_led_endurance_app
+  - BLE制御層（scan / stock / stress / endurance / shipment inspection など）
+  - 画面層（app_root, setup, dual_color, endurance, stress_lab など）
+  - Android/iOS設定（Manifest, styles, launcher icon, Podfile, Info.plist）
+- arduino/xiao_esp32c3_stock2/xiao_esp32c3_stock2.ino
+- gui_c3_state_check_dual.py
+- ski_led_app/lib/screens/stock_select_screen.dart
+
+3. 新規作成・追加中（未追跡）
+
+- Loreley navigation light/
+  - 航法灯仕様書（aircraft_4led_navigation_light_spec_ja.txt）
+  - 航法灯向けFlutterアプリ一式
+  - ESP32C3向けFW（loreley_navigation_light_esp32c3.ino）
+- Sales related documents/
+  - ScepTRONIC_AppStore_public_description.txt
+  - App Store公開文、170字プロモ文、審査メモ案（英日）
+- Doc/process_record_spec_20260318.txt
+  - 製造/検査の工程記録モデル仕様
+- そのほか試作・検証系
+  - septronics/
+  - glb_viewer_test_app/
+  - ble_led_backup_20260322_203147/
+  - arduino/ina780b_basic_sample/
+  - arduino/xiao_esp32c6_led_probe/
+  - arduino/xiao_esp32c6_stock2/
+  - Untitled.glb, head_.blend など
+
+4. 現在のワークツリー状況（2026-05-04 時点）
+
+- git status（short）件数: 59
+- うち modified: 36
+- うち staged add: 2
+- うち untracked（トップレベル表示）: 21
+
+補足
+- 本まとめは、git履歴とワークツリー差分を基に作成。
+- 未追跡配下の個別ファイルは多数のため、フォルダ単位で集約記載。

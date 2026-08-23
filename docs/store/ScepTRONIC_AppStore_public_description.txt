@@ -1,0 +1,71 @@
+ScepTRONIC App Store 公開用テキスト案
+
+==============================
+1. App Store 概要 / Description
+==============================
+
+ScepTRONICは、専用BLE LEDデバイスをiPhoneまたはiPadから直感的に操作するためのアプリです。
+
+Stock A / Stock Bの2台のLEDデバイスを登録し、色・明るさ・点灯モードを自由に調整できます。左右または複数のLEDデバイスを個別に設定したり、BOTH SYNCRO機能で同時に演出を切り替えたりすることで、使用シーンに合わせた発光表現を簡単に作成できます。
+
+LEDの状態だけでなく、接続状態やバッテリー状態もアプリ上で確認できるため、使用前の準備から運用中の確認までスムーズに行えます。
+
+主な機能
+・専用BLE LEDデバイスの検出と接続
+・Stock A / Stock Bの個別コントロール
+・2台同時の同期制御
+・色、明るさ、点灯モードの変更
+・Heartbeat、Rainbowなどの演出モード
+・接続状態とバッテリー状態の表示
+・自動再接続設定
+
+ScepTRONICは、LEDデバイスをより分かりやすく、より快適に扱うためのコントロールアプリです。シンプルな操作で、発光パターンの変更、明るさ調整、接続確認をすばやく行えます。
+
+※本アプリの利用には、対応する専用BLE LEDデバイスが必要です。
+※Bluetoothの利用には、端末側でBluetoothを有効にし、アプリへの権限許可が必要です。
+
+==============================
+2. 短めの概要案
+==============================
+
+ScepTRONICは、専用BLE LEDデバイスをiPhoneまたはiPadから操作するためのアプリです。Stock A / Stock Bの2台を登録し、色、明るさ、点灯モードを個別または同期して変更できます。接続状態やバッテリー状態も確認でき、LEDデバイスの設定と運用をスムーズに行えます。
+
+==============================
+3. プロモーション用テキスト案 / 170文字以内
+==============================
+
+専用BLE LEDデバイスを、もっと直感的に。Stock A / Stock Bの色・明るさ・点灯モードを個別または同期して操作できます。
+
+==============================
+4. App Review 審査メモ案
+==============================
+
+This app is designed to control dedicated BLE LED hardware.
+
+The app can be launched without login. Some functions require connection to the dedicated BLE device.
+
+Review steps:
+1. Launch the app.
+2. Open Bluetooth Setting.
+3. Power on the dedicated BLE LED devices.
+4. Connect Stock A and Stock B.
+5. Open LED Setting and test color, brightness, and lighting modes.
+
+The app does not include user registration, advertising SDKs, analytics SDKs, or automatic transmission of stored device settings to external servers.
+
+==============================
+5. 日本語版 審査補足メモ
+==============================
+
+本アプリは、専用BLE LEDハードウェアを制御するためのアプリです。
+
+ログインなしで起動できますが、LED制御機能の一部は専用BLEデバイスとの接続が必要です。
+
+審査時の確認手順:
+1. アプリを起動します。
+2. Bluetooth Settingを開きます。
+3. 専用BLE LEDデバイスの電源を入れます。
+4. Stock A / Stock Bを接続します。
+5. LED Setting画面で、色、明るさ、点灯モードを確認します。
+
+本アプリには、ユーザー登録機能、広告SDK、外部解析SDKは含まれていません。また、端末内に保存したLED設定やデバイス設定を外部サーバーへ自動送信する機能はありません。
