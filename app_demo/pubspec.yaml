@@ -1,0 +1,31 @@
+name: septronics
+description: Consolidated BLE ScepTRONIC app for Stock A/B control and diagnostics
+publish_to: "none"
+version: 0.1.4+8
+environment:
+  sdk: ">=3.2.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  go_router: ^14.2.1
+  flutter_reactive_ble: ^5.0.3
+  permission_handler: ^11.3.1
+  logger: ^2.4.0
+  flutter_colorpicker: ^1.0.3
+  device_info_plus: ^12.4.0
+  google_fonts: ^6.2.1
+  path_provider: ^2.1.5
+  package_info_plus: ^8.1.3
+  usb_serial: ^0.5.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/branding/
