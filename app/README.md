@@ -42,3 +42,8 @@ Install to a connected Android device:
 ```powershell
 powershell -ExecutionPolicy Bypass -File app\tools\install_app.ps1 -BuildMode release -Launch
 ```
+
+## Release documentation
+
+- [Build 8–15 change history](docs/BUILD_8_TO_15_RELEASE_HISTORY.md)
+- [Build 15 App Store / Google Play release work](docs/BUILD_15_STORE_RELEASE_WORK.md)
