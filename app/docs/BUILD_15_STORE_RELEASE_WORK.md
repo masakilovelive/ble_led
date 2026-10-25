@@ -10,6 +10,28 @@
 
 関連変更は[Build 8–15変更履歴](BUILD_8_TO_15_RELEASE_HISTORY.md)を参照する。
 
+## 0. 現在の進捗（2026-10-25確認）
+
+- [x] Build 15をiPhone 16／iOS 26.2.1へインストールした。
+- [x] iOSで、MCU起動→アプリ起動→Bluetooth Settingを開かず自動接続することを確認した。
+- [x] iOSで、アプリ起動中→MCU再起動→Bluetooth Settingを開かず自動再接続することを確認した。
+- [x] `flutter analyze`を実行し、問題がないことを確認した。
+- [x] Flutterテスト5件が合格した。
+- [x] Google Driveへ実機動画①〜⑮（MP4）をアップロードした。
+- [x] Google Driveへ動画撮影手順シートをアップロードした。
+- [x] Google Driveへ知的財産・所有権確認書のWord原稿をアップロードした。
+- [ ] Google Drive内の動画、シート、書類を「リンクを知っている全員・閲覧者」へ変更する。確認時点では`not_shared`。
+- [ ] 動画撮影手順のファイル名と本文に残るBuild 12／14表記をBuild 15へ統一する。
+- [ ] 所有権確認書の審査対象を`0.1.5 (Build 15)`へ更新し、未記入欄、動画URL、署名を完成させる。
+- [ ] 完成した所有権確認書をPDF化する。
+- [ ] Google未ログインのシークレットウィンドウで、フォルダー、動画①〜⑮、手順シート、PDFを閲覧できることを確認する。
+- [ ] Android実機でBuild 15のAuto reconnect ON/OFFとMCU再起動後再接続を確認する。
+- [ ] Build 15をApp Store ConnectおよびGoogle Play Consoleへアップロードする。
+
+Google Drive提出準備フォルダー:
+
+- https://drive.google.com/drive/folders/1hgO4m9Mn7VvCPbGtBNC1vhVEJvSBO1cw
+
 ## 1. 両ストア共通
 
 - [ ] iOSとAndroidのソースが同一のBuild 15仕様であることを確認する。
@@ -19,7 +41,7 @@
 - [ ] Noxel-1／Noxel-2、色、明るさ、Head、Tip、Heart Beat、Rainbow、A+B同期を確認する。
 - [ ] 充電検知・電圧表示に回帰がないことを確認する。
 - [ ] Demo Mode、`START DEMO`、UUID／MAC相当識別子、不要な右上リンク状態アイコンが表示されないことを確認する。
-- [ ] `flutter analyze`とテストを実行し、結果を保存する。
+- [x] `flutter analyze`とテストを実行し、結果を保存する（解析問題なし、テスト5件合格）。
 - [ ] iOS IPAとAndroid署名済みAABをBuild 15で作成する。
 - [ ] スクリーンショット、動画、説明文がBuild 15の実画面と一致していることを確認する。
 
@@ -34,6 +56,8 @@
 
 ### Guideline 2.1: App Completeness
 
+- [x] 実機動画①〜⑮をMP4でGoogle Driveへアップロードする。
+- [x] 動画番号と機能を対応付ける撮影手順シートをGoogle Driveへアップロードする。
 - [ ] 実物のNoxel-1／Noxel-2とiPhone画面を同時に映した動画を用意する。画面収録だけにしない。
 - [ ] 動画に、登録、接続、主要LED操作、アプリ起動時自動接続、MCU再起動後自動再接続を含める。
 - [ ] Google DriveへMP4を置き、「リンクを知っている全員・閲覧者」に設定する。
@@ -45,6 +69,7 @@ Appleは、専用ハードウェアが必要なアプリについて、物理App
 
 ### Guideline 5.2.1: Intellectual Property
 
+- [x] 知的財産・所有権確認書のWord原稿をGoogle Driveへアップロードする。
 - [ ] ScepTRONIC名称、ロゴ、製品およびBLEハードウェアをアプリで使用・配布する権限を示す許諾書を準備する。
 - [ ] 権利者の正式法人名、住所、担当者名、役職、連絡先、発行日、署名または社印を記載する。
 - [ ] `com.FAE.ScepTRONIC`をApple App Storeで配布する許可を明記する。
