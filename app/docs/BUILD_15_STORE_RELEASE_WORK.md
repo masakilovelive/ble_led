@@ -1,6 +1,6 @@
 # ScepTRONIC Build 15 ストア再提出作業
 
-最終更新: 2026-10-25
+最終更新: 2026-10-27
 
 対象候補:
 
@@ -10,7 +10,9 @@
 
 関連変更は[Build 8–15変更履歴](BUILD_8_TO_15_RELEASE_HISTORY.md)を参照する。
 
-## 0. 現在の進捗（2026-10-25確認）
+## 0. 現在の進捗（2026-10-27確認）
+
+iOS実機試験およびFlutterテストの結果は2026-10-25の記録を継承する。2026-10-27はApple審査用資料の整理、共有設定、未ログインでの閲覧・再生確認を実施した。ストアへのアップロード・提出完了を示す記録ではない。
 
 - [x] Build 15をiPhone 16／iOS 26.2.1へインストールした。
 - [x] iOSで、MCU起動→アプリ起動→Bluetooth Settingを開かず自動接続することを確認した。
@@ -20,17 +22,56 @@
 - [x] Google Driveへ実機動画①〜⑮（MP4）をアップロードした。
 - [x] Google Driveへ動画撮影手順シートをアップロードした。
 - [x] Google Driveへ知的財産・所有権確認書のWord原稿をアップロードした。
-- [ ] Google Drive内の動画、シート、書類を「リンクを知っている全員・閲覧者」へ変更する。確認時点では`not_shared`。
-- [ ] 動画撮影手順のファイル名と本文に残るBuild 12／14表記をBuild 15へ統一する。
-- [ ] 所有権確認書の審査対象を`0.1.5 (Build 15)`へ更新し、未記入欄、動画URL、署名を完成させる。
-- [ ] 完成した所有権確認書をPDF化する。
-- [ ] Google未ログインのシークレットウィンドウで、フォルダー、動画①〜⑮、手順シート、PDFを閲覧できることを確認する。
+- [x] 動画①〜⑮と手順シートの計16件を「リンクを知っている全員・閲覧者」へ変更した。各ファイルの権限情報でも `type=anyone / role=reader / allowFileDiscovery=false` を確認した。
+- [x] 手順シートのファイル名・タブ名・本文に残っていたBuild 12／14の対象表記をBuild 15へ統一した。
+- [x] 手順シートに「提出URL対応表」タブを追加し、動画15本の番号・機能・URL・共有状態・閲覧確認結果・保留事項を記録した。
+- [x] 所有権確認書の審査対象を `0.1.5 (Build 15)` へ更新し、Bundle IDと動画対応表のURLを記載した。未記入・未署名・本人の事実確認待ちを明示した。
+- [x] Googleからログアウトした実ブラウザーで、動画①〜⑮をそれぞれ冒頭から再生し、プレーヤーの終端到達を確認した。
+- [x] 同じ未ログイン状態で、手順シートの本文と「閲覧のみ」表示を確認した。
+- [ ] 各動画が審査対象Build 15で撮影されたこと、および必要な操作内容が揃っていることを最終確認する。
+- [ ] 所有権確認書の未記入欄、単独所有・配布権限の事実確認、裏付け資料、本人署名を完成させる。
+- [ ] 本人確認・署名後の所有権確認書を提出用PDFにし、App Store Connectへ添付する。
 - [ ] Android実機でBuild 15のAuto reconnect ON/OFFとMCU再起動後再接続を確認する。
 - [ ] Build 15をApp Store ConnectおよびGoogle Play Consoleへアップロードする。
 
-Google Drive提出準備フォルダー:
+Google Driveの資料:
 
-- https://drive.google.com/drive/folders/1hgO4m9Mn7VvCPbGtBNC1vhVEJvSBO1cw
+- [動画撮影手順・提出URL対応表](https://docs.google.com/spreadsheets/d/1GbZrWEGsyEIiQu3ybHnvgobcpMCuCQHNohdQDNDxc7Y/edit?gid=319156219#gid=319156219) — ログイン不要・閲覧者。審査へ案内する動画の個別URLはこのタブに集約。
+- [所有権確認書のWord原稿（未署名）](https://docs.google.com/document/d/1kZdY6-CDGHpY5MwEReWUkHRD6IRD1HNy/edit) — `ScepTRONIC_Build15_Ownership_JA_未署名.docx`。非共有のまま。署名済みPDFの代わりとして提出しない。
+- [提出準備フォルダー](https://drive.google.com/drive/folders/1hgO4m9Mn7VvCPbGtBNC1vhVEJvSBO1cw) — 内部管理用。今回の公開対象は動画15本と手順シートのみ。審査にはフォルダーではなく個別動画URLまたは対応表URLを案内する。
+
+### 2026-10-27の確認範囲と残課題
+
+- 動画の機能・番号は、各動画から抽出した6か所のフレームと手順シートで部分照合した。別途、Google未ログインの実ブラウザーで全15本の再生開始と終端到達を確認した。全操作の目視判定や音声内容の確認が完了したという意味ではない。
+- 撮影時のBuild番号は映像から判読できていない。特に①はDrive上の作成日が2026-10-13のため、Build 15の映像として使用できるか本人確認が必要。作成日だけで撮影Buildを断定しない。
+- 所有権確認書では旧 `1.0 (Build 8)` を `0.1.5 (Build 15)` へ更新した。旧Submission ID `bfd67569-31fd-4825-9270-acb92975df71` は過去の参照情報として区別し、今回の提出IDとしては未確認とした。
+- Bundle ID `com.FAE.ScepTRONIC` はこの作業記録に基づいて記載した。App Store Connectの実値との照合、Apple Developerアカウント名、Team ID、今回のSubmission ID、連絡先、発行日、署名は本人確認・記入待ち。
+- 単独所有、制作・管理、使用・配布権限の記載、およびその裏付け資料は本人の事実確認待ち。署名、添付、審査への返信を完了したものとして扱わない。
+- 所有権確認書にも、動画・シートの共有と未ログイン閲覧を確認した結果を追記した。未署名原稿のため、提出用の署名済みPDFは未完成。
+- 初回の未ログインHTTP確認では動画がHTTP 429、シートがHTTP 401だったが、共有変更後の実ブラウザー確認で上記16件の閲覧・再生成功を確認した。最終判定はこの実ブラウザー確認結果を採用する。
+- App Store Connect／Google Play ConsoleへのBuild 15アップロード、Review Notesの登録、署名済みPDFの添付、Appleへの返信・再提出は今回実施していない。
+
+### 動画番号とURLの対応表
+
+2026-10-27、全15本で「リンクを知っている全員・閲覧者」の設定と、Google未ログインでの再生開始・終端到達を確認済み。各動画の撮影Buildと操作内容の最終確認は保留。
+
+| 動画 | 手順シート上の機能 | URL |
+| --- | --- | --- |
+| ① | 初回登録・接続 | [①.mp4](https://drive.google.com/file/d/1clrCN5QSA6DObE6JFuagLasMc1EUIZda/view) |
+| ② | Stock A Head単色 | [②.mp4](https://drive.google.com/file/d/1UznXBFiI4HJja4itNrzzN2sPXh5QNdoT/view) |
+| ③ | Stock A Tip単色 | [③.mp4](https://drive.google.com/file/d/1D2f6OR4EG1tbPTuQyxt1iA9Nd08x7rVz/view) |
+| ④ | Stock B Head単色 | [④.mp4](https://drive.google.com/file/d/1nSG9cE6b9qZmOmxiXqA6Sw0SGpcbjBPV/view) |
+| ⑤ | Stock B Tip単色 | [⑤.mp4](https://drive.google.com/file/d/10GlI8-ihwqShPGSgpyOEvf8n3NfXEwJq/view) |
+| ⑥ | Stock A Heart Beat | [⑥.mp4](https://drive.google.com/file/d/1kz3R2vezFe7cPQPHUx_UhGCRvUsNHjJZ/view) |
+| ⑦ | Stock A Rainbow | [⑦.mp4](https://drive.google.com/file/d/15MtKMUDLlmB7FHr1bkN0kig7zGG_BKLE/view) |
+| ⑧ | Stock B Heart Beat | [⑧.mp4](https://drive.google.com/file/d/19tHGvilXguAA2ugws3yuS2VjAo8yil2X/view) |
+| ⑨ | Stock B Rainbow | [⑨.mp4](https://drive.google.com/file/d/1DaicfwGY1eOqDvX5q63aSFAZTPT3j-ZL/view) |
+| ⑩ | A+B同期 Heart Beat・Rainbow | [⑩.mp4](https://drive.google.com/file/d/16yx1f88wiMGyoeT1ZYzQ-hL_Xi292gVs/view) |
+| ⑪ | A+B同期 単色設定 | [⑪.mp4](https://drive.google.com/file/d/1Nrtz4SIx40L6NgpbfuGnfbmnlnuzVdh8/view) |
+| ⑫ | 切断・手動接続 | [⑫.mp4](https://drive.google.com/file/d/1vZhsM08bTVpVakxFumb04uajpXSByEuS/view) |
+| ⑬ | Auto reconnect ON MCU起動→アプリ起動 | [⑬.mp4](https://drive.google.com/file/d/1rtPXPcY7Jj59opfHkSzUZfr7u8soa_Y0/view) |
+| ⑭ | Auto reconnect ON アプリ起動中→MCU再起動 | [⑭.mp4](https://drive.google.com/file/d/1teVypqytiumKDGEVK5JvBikohITiYaQe/view) |
+| ⑮ | Auto reconnect OFF・手動接続 | [⑮.mp4](https://drive.google.com/file/d/1rRbxjrn-oR93--7frWtu5rteec3vpxoP/view) |
 
 ## 1. 両ストア共通
 
@@ -58,10 +99,10 @@ Google Drive提出準備フォルダー:
 
 - [x] 実機動画①〜⑮をMP4でGoogle Driveへアップロードする。
 - [x] 動画番号と機能を対応付ける撮影手順シートをGoogle Driveへアップロードする。
-- [ ] 実物のNoxel-1／Noxel-2とiPhone画面を同時に映した動画を用意する。画面収録だけにしない。
-- [ ] 動画に、登録、接続、主要LED操作、アプリ起動時自動接続、MCU再起動後自動再接続を含める。
-- [ ] Google DriveへMP4を置き、「リンクを知っている全員・閲覧者」に設定する。
-- [ ] Google未ログインのシークレットウィンドウで動画を最初から再生できることを確認する。
+- [x] 実機とiPhone画面を同時に撮影した動画①〜⑮を用意した。抽出フレームで実機・画面を部分確認した。
+- [ ] 登録、接続、主要LED操作、アプリ起動時自動接続、MCU再起動後自動再接続が、Build 15の動画として必要な操作を満たすことを最終確認する（番号・機能の部分照合は実施済み）。
+- [x] Google Driveの動画①〜⑮と手順シートを「リンクを知っている全員・閲覧者」に設定した（2026-10-27）。
+- [x] Googleからログアウトした実ブラウザーで、動画①〜⑮すべての再生開始と終端到達を確認した（2026-10-27）。シークレットウィンドウを使用したとの記録ではない。
 - [ ] Review Notesへ動画URL、必要ハードウェア、確認手順、試験端末・OSを記載する。
 - [ ] 審査完了まで動画を移動・削除せず、共有権限を維持する。
 
@@ -69,11 +110,12 @@ Appleは、専用ハードウェアが必要なアプリについて、物理App
 
 ### Guideline 5.2.1: Intellectual Property
 
-- [x] 知的財産・所有権確認書のWord原稿をGoogle Driveへアップロードする。
-- [ ] ScepTRONIC名称、ロゴ、製品およびBLEハードウェアをアプリで使用・配布する権限を示す許諾書を準備する。
-- [ ] 権利者の正式法人名、住所、担当者名、役職、連絡先、発行日、署名または社印を記載する。
-- [ ] `com.FAE.ScepTRONIC`をApple App Storeで配布する許可を明記する。
-- [ ] 会社レターヘッド付きPDFとし、商標登録証、契約書、発注書など補足資料があれば添付する。
+- [x] 知的財産・所有権確認書のWord原稿をGoogle Driveへアップロードした。
+- [x] 単独所有者宣言書の原稿を `0.1.5 (Build 15)` へ更新し、動画対応表URLと2026-10-27の閲覧確認結果を記載した。未署名・非共有の原稿として管理している。
+- [ ] ScepTRONIC名称、ロゴ、製品およびBLEハードウェアについて、単独所有・使用・配布権限の記載が事実と一致するか本人が確認し、裏付け資料を揃える。
+- [ ] 氏名、住所、連絡先、発行日、Apple Developerアカウント名、Team ID、今回のSubmission IDを本人が確認・記入し、署名する。法人の存在・役職・社印など未確認の事実を補完しない。
+- [ ] `com.FAE.ScepTRONIC` のApple App Storeでの配布権限に関する記載を本人が確認する。
+- [ ] 確認・署名済みの書類を提出用PDFにし、所有を裏付ける原本・開発記録・契約書など実在する補足資料を必要に応じて添付する。
 - [ ] App Review InformationのAttachmentへPDFを追加し、Review NotesとAppleへの返信で説明する。
 
 ### メタデータと再提出
