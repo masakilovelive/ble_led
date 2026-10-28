@@ -19,11 +19,35 @@ Build 15のストアアップロード後、Android実機のStock Setting画面�
 - [x] 修正後のAndroid画面を実機（SH 02M、1080×2160、font scale 1.0）で確認した。
 - [x] `flutter analyze`で問題なし、Flutterテスト5件の合格を確認した。
 - [x] Android実機へ通常版`0.1.6 (16)`をインストールし、versionCode `16`／versionName `0.1.6`を確認した。
+- [x] iOS実機（a4os5のiPhone）へ`0.1.6 (16)`をインストールし、Bundle ID `com.FAE.ScepTRONIC`、バージョン`0.1.6`、Build `16`を端末情報で確認した。
 - [x] iOS用IPAを`0.1.6 (16)`で生成し、App Store Connectへアップロードした。Xcode Organizerの状態は`Uploaded with warnings`。
 - [x] Android用署名済みAABをversionCode `16`／versionName `0.1.6`で生成し、Google Play Consoleのクローズドテスト下書きへアップロードした。
+- [x] 動画①をBuild 16で再撮影し、無音版`①_Build16_無音.mp4`をGoogle Driveへ追加した。
+- [x] 動画提出URL対応表の①を、Build 16無音版のURL・再生時間・確認状況へ更新した。
+- [x] 動画内の表示`0.1.6`とApp Store Connectの提出Build `0.1.6 (16)`の対応は、アプリ名を変更せずReview Notesで説明する方針とした。
 - [ ] Google Play Consoleの下書きにBuild 15とBuild 16が両方表示されているため、Build 15をリリース対象から外し、Build 16のみで保存する。
 - [ ] App Store ConnectとGoogle Play ConsoleのスクリーンショットをBuild 16表示に差し替える。
+- [ ] 動画①の共有権限と、Google未ログイン状態での再生を最終確認する。
 - [ ] リリースノート、Review Notes、動画、知的財産書類を最終確認し、各ストアの審査へ送信する。
+
+### Build 16動画①とReview Notes（2026-10-28更新）
+
+- 動画①（Build 16・無音版）: [①_Build16_無音.mp4](https://drive.google.com/file/d/1mEaeRlyByK1Aajfws1DIL7gG-tEc6emR/view?usp=drivesdk)
+- 再生時間: 約42.82秒
+- 動画内で表示されるアプリバージョンは`0.1.6`。App Store Connectへアップロード済みの対象は`0.1.6 (Build 16)`。
+- アプリ名またはホーム画面表示名を`Build 16`付きへ変更しない。名称変更はBuildの証明にならず、追加バイナリが必要になるため、提出済みBuild 16を維持する。
+- Build番号との対応はApp Store ConnectのReview Notesへ明記する。
+
+Review Notes追記案:
+
+```text
+The version displayed in the app is 0.1.6. This corresponds to version 0.1.6,
+build 16, submitted in App Store Connect. The attached demonstration video was
+recorded using this build.
+
+動画内に表示されるバージョン0.1.6は、App Store Connectへ提出した
+バージョン0.1.6（Build 16）です。本動画は当該ビルドで撮影しています。
+```
 
 ### アップロード時の警告と注意点
 
