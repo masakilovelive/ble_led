@@ -1,18 +1,39 @@
-# ScepTRONIC Build 15 ストア再提出作業
+# ScepTRONIC Build 15→16 ストア再提出作業
 
-最終更新: 2026-10-27
+最終更新: 2026-10-28
 
-対象候補:
+現在の対象:
 
-- iOS: `0.1.5 (15)`
-- Android: versionName `0.1.5` / versionCode `15`
+- iOS: `0.1.6 (16)`
+- Android: versionName `0.1.6` / versionCode `16`
 - Bundle ID / Application ID: `com.FAE.ScepTRONIC`
 
 関連変更は[Build 8–15変更履歴](BUILD_8_TO_15_RELEASE_HISTORY.md)を参照する。
 
-## 0. 現在の進捗（2026-10-27確認）
+## 0A. Build 16への更新と現在の進捗（2026-10-28確認）
 
-iOS実機試験およびFlutterテストの結果は2026-10-25の記録を継承する。2026-10-27はApple審査用資料の整理、共有設定、未ログインでの閲覧・再生確認を実施した。ストアへのアップロード・提出完了を示す記録ではない。
+Build 15のストアアップロード後、Android実機のStock Setting画面で、狭い2列レイアウト内の`Head`／`Tip`と`RAINBOW`バッジがオーバーフローすることを確認した。端末のフォント倍率は標準`1.0`であり、原因は端末設定ではなく固定幅UIだった。iOSとAndroidで共有するFlutterコードを可変レイアウトに修正したため、両OSをBuild 16に統一した。Bluetooth通信、Auto reconnect、ファームウェアの仕様変更ではない。
+
+- [x] `SceptronicStatusPill`をコンパクト表示に対応させた。
+- [x] Stock Settingの`Head`／`Tip`見出しを可変幅と縮小表示にし、狭いAndroid端末でのオーバーフローを解消した。
+- [x] 修正後のAndroid画面を実機（SH 02M、1080×2160、font scale 1.0）で確認した。
+- [x] `flutter analyze`で問題なし、Flutterテスト5件の合格を確認した。
+- [x] Android実機へ通常版`0.1.6 (16)`をインストールし、versionCode `16`／versionName `0.1.6`を確認した。
+- [x] iOS用IPAを`0.1.6 (16)`で生成し、App Store Connectへアップロードした。Xcode Organizerの状態は`Uploaded with warnings`。
+- [x] Android用署名済みAABをversionCode `16`／versionName `0.1.6`で生成し、Google Play Consoleのクローズドテスト下書きへアップロードした。
+- [ ] Google Play Consoleの下書きにBuild 15とBuild 16が両方表示されているため、Build 15をリリース対象から外し、Build 16のみで保存する。
+- [ ] App Store ConnectとGoogle Play ConsoleのスクリーンショットをBuild 16表示に差し替える。
+- [ ] リリースノート、Review Notes、動画、知的財産書類を最終確認し、各ストアの審査へ送信する。
+
+### アップロード時の警告と注意点
+
+- iOS deployment targetは現在`13.0`。2027年4月以降のアップロードでは`15.0`以上が必要というApple警告がある。今回のBuild 16アップロード自体は完了している。
+- `objective_c.framework`の対応dSYMがArchiveに含まれないというシンボル警告がある。バイナリのアップロードは成功しているが、クラッシュ解析性のため今後解消を検討する。
+- Build 16はまだ審査送信・公開完了ではない。App Store ConnectでのBuild選択と`Submit for Review`、Google Play Consoleでのプレビュー確認とテストリリース開始は未実施。
+
+## 0. Build 15時点の進捗（2026-10-27確認、履歴）
+
+以下はBuild 15時点の履歴であり、現在の正式対象は上記Build 16とする。iOS実機試験およびFlutterテストの結果は2026-10-25の記録を継承する。2026-10-27はApple審査用資料の整理、共有設定、未ログインでの閲覧・再生確認を実施した。ストアへのアップロード・提出完了を示す記録ではない。
 
 - [x] Build 15をiPhone 16／iOS 26.2.1へインストールした。
 - [x] iOSで、MCU起動→アプリ起動→Bluetooth Settingを開かず自動接続することを確認した。
