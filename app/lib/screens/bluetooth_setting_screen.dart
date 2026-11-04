@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 
+import '../app/product_ui_state.dart';
 import '../ble/models.dart';
 import '../ble/scan_controller.dart';
 import '../ble/stock_controller.dart';
@@ -64,6 +65,7 @@ class _BluetoothSettingScreenState
   Widget build(BuildContext context) {
     final stockState = ref.watch(stockProvider);
     final scanState = ref.watch(scanProvider);
+    const demoMode = false;
     final devices = scanState.maybeWhen(
       data: (value) => value,
       orElse: () => const <BleDevice>[],
@@ -160,17 +162,20 @@ class _BluetoothSettingScreenState
                         runSpacing: 12,
                         children: [
                           FilledButton(
-                            onPressed: _canConnectBoth(stockState)
+                            onPressed: !sceptronicScreenshotMode &&
+                                    _canConnectBoth(stockState)
                                 ? _connectBoth
                                 : null,
                             child: const Text('CONNECT BOTH'),
                           ),
                           OutlinedButton(
-                            onPressed: _canDisconnectBoth(stockState)
-                                ? () => ref
-                                    .read(stockProvider.notifier)
-                                    .disconnectBoth()
-                                : null,
+                            onPressed: sceptronicScreenshotMode
+                                ? () {}
+                                : _canDisconnectBoth(stockState)
+                                    ? () => ref
+                                        .read(stockProvider.notifier)
+                                        .disconnectBoth()
+                                    : null,
                             child: const Text('DISCONNECT BOTH'),
                           ),
                           SizedBox(
@@ -238,6 +243,7 @@ class _BluetoothSettingScreenState
                               context,
                               stockState: stockState,
                               side: StockSide.a,
+                              demoMode: demoMode,
                             ),
                           ),
                           const SizedBox(width: 18),
@@ -246,6 +252,7 @@ class _BluetoothSettingScreenState
                               context,
                               stockState: stockState,
                               side: StockSide.b,
+                              demoMode: demoMode,
                             ),
                           ),
                         ],
@@ -256,12 +263,14 @@ class _BluetoothSettingScreenState
                             context,
                             stockState: stockState,
                             side: StockSide.a,
+                            demoMode: demoMode,
                           ),
                           const SizedBox(height: 18),
                           _buildSideCard(
                             context,
                             stockState: stockState,
                             side: StockSide.b,
+                            demoMode: demoMode,
                           ),
                         ],
                       ),
@@ -284,7 +293,7 @@ class _BluetoothSettingScreenState
                                   ),
                                 ),
                                 const SizedBox(width: 12),
-                                _buildScanActions(),
+                                _buildScanActions(false),
                               ],
                             )
                           : Column(
@@ -298,7 +307,7 @@ class _BluetoothSettingScreenState
                                   ),
                                 ),
                                 const SizedBox(height: 12),
-                                _buildScanActions(),
+                                _buildScanActions(false),
                               ],
                             ),
                       const SizedBox(height: 8),
@@ -315,10 +324,9 @@ class _BluetoothSettingScreenState
                           child: Center(child: CircularProgressIndicator()),
                         )
                       else if (scanError != null)
-                        Text(
-                          'Scan error: $scanError',
-                          style:
-                              const TextStyle(color: SceptronicPalette.danger),
+                        const Text(
+                          'Bluetooth scan is unavailable. Check Bluetooth permission and retry SCAN.',
+                          style: TextStyle(color: SceptronicPalette.warning),
                         )
                       else if (devices.isEmpty)
                         const SizedBox(height: 12)
@@ -353,8 +361,7 @@ class _BluetoothSettingScreenState
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'N:${info.pairNumber ?? '?'} Role:${info.role ?? '?'}'
-                                    '${device.rssi != null ? '  RSSI ${device.rssi}' : ''}',
+                                    '${device.id}${device.rssi != null ? '  RSSI ${device.rssi}' : ''}',
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodySmall
@@ -438,18 +445,20 @@ class _BluetoothSettingScreenState
     );
   }
 
-  Widget _buildScanActions() {
+  Widget _buildScanActions(bool demoMode) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
         FilledButton.icon(
-          onPressed: () => ref.read(scanProvider.notifier).start(),
+          onPressed:
+              demoMode ? null : () => ref.read(scanProvider.notifier).start(),
           icon: const Icon(Icons.play_arrow_rounded),
           label: const Text('SCAN'),
         ),
         OutlinedButton.icon(
-          onPressed: () => ref.read(scanProvider.notifier).stop(),
+          onPressed:
+              demoMode ? null : () => ref.read(scanProvider.notifier).stop(),
           icon: const Icon(Icons.stop_rounded),
           label: const Text('STOP'),
         ),
@@ -502,8 +511,10 @@ class _BluetoothSettingScreenState
                 icon: Icons.link_rounded,
                 title: '4. Connect',
                 detail: stockState.registered
-                    ? 'Both devices are stored. You can connect now.'
-                    : 'When both cards show SET, connect the pair.',
+                    ? stockState.autoReconnect
+                        ? 'Both devices are stored. They connect automatically at launch and reconnect after an interruption.'
+                        : 'Both devices are stored. Tap CONNECT BOTH to connect manually.'
+                    : 'Assign both devices, then tap CONNECT BOTH. Future launches connect automatically when Auto reconnect is on.',
               ),
             ],
           ),
@@ -577,16 +588,34 @@ class _BluetoothSettingScreenState
     BuildContext context, {
     required StockState stockState,
     required StockSide side,
+    required bool demoMode,
   }) {
     final sideState = side == StockSide.a ? stockState.a : stockState.b;
-    final isConnected = sideState.status == DeviceConnectionState.connected;
+    final liveScreenshot = demoMode && sceptronicScreenshotMode;
+    final isConnected =
+        liveScreenshot || sideState.status == DeviceConnectionState.connected;
     final roleLabel = side == StockSide.a ? 'A' : 'B';
-    final statusColor = switch (sideState.status) {
-      DeviceConnectionState.connected => SceptronicPalette.success,
-      DeviceConnectionState.connecting => SceptronicPalette.primary,
-      DeviceConnectionState.disconnecting => SceptronicPalette.warning,
-      DeviceConnectionState.disconnected => SceptronicPalette.danger,
-    };
+    final statusColor = liveScreenshot
+        ? SceptronicPalette.success
+        : demoMode
+            ? SceptronicPalette.success
+            : switch (sideState.status) {
+                DeviceConnectionState.connected => SceptronicPalette.success,
+                DeviceConnectionState.connecting => SceptronicPalette.primary,
+                DeviceConnectionState.disconnecting =>
+                  SceptronicPalette.warning,
+                DeviceConnectionState.disconnected => SceptronicPalette.danger,
+              };
+    final statusLabel = liveScreenshot
+        ? 'CONNECTED'
+        : demoMode
+            ? 'DEMO READY'
+            : sideState.status.name.toUpperCase();
+    final deviceLabel = liveScreenshot
+        ? 'stock$roleLabel'
+        : demoMode
+            ? 'Virtual Stock $roleLabel'
+            : sideState.device?.name ?? 'Not assigned';
 
     return SceptronicPanel(
       child: Column(
@@ -600,26 +629,26 @@ class _BluetoothSettingScreenState
               ),
               const Spacer(),
               SceptronicStatusPill(
-                label: sideState.status.name.toUpperCase(),
+                label: statusLabel,
                 color: statusColor,
               ),
             ],
           ),
           const SizedBox(height: 14),
           Text(
-            sideState.device?.name ?? 'Not assigned',
+            deviceLabel,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
           ),
-          if (sideState.message != null) ...[
+          if (!demoMode && sideState.message != null) ...[
             const SizedBox(height: 10),
             Text(
               sideState.message!,
               style: const TextStyle(color: SceptronicPalette.danger),
             ),
           ],
-          if (sideState.device != null) ...[
+          if (demoMode || sideState.device != null) ...[
             const SizedBox(height: 10),
             const SceptronicStatusPill(
               label: 'SET',
@@ -632,21 +661,27 @@ class _BluetoothSettingScreenState
             runSpacing: 10,
             children: [
               FilledButton(
-                onPressed: sideState.device != null && !isConnected
+                onPressed: !demoMode && sideState.device != null && !isConnected
                     ? () => _connectSide(side)
                     : null,
                 child: const Text('CONNECT'),
               ),
               OutlinedButton(
-                onPressed: isConnected
-                    ? () => ref.read(stockProvider.notifier).disconnect(side)
-                    : null,
+                onPressed: liveScreenshot
+                    ? () {}
+                    : !demoMode && isConnected
+                        ? () =>
+                            ref.read(stockProvider.notifier).disconnect(side)
+                        : null,
                 child: const Text('DISCONNECT'),
               ),
               TextButton(
-                onPressed: sideState.device != null
-                    ? () => ref.read(stockProvider.notifier).clearDevice(side)
-                    : null,
+                onPressed: liveScreenshot
+                    ? () {}
+                    : !demoMode && sideState.device != null
+                        ? () =>
+                            ref.read(stockProvider.notifier).clearDevice(side)
+                        : null,
                 child: const Text('CLEAR'),
               ),
             ],

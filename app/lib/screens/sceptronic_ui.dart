@@ -163,6 +163,59 @@ class SceptronicPanel extends StatelessWidget {
   }
 }
 
+class SceptronicDemoBanner extends StatelessWidget {
+  const SceptronicDemoBanner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: SceptronicPalette.primary.withValues(alpha: 0.1),
+        border: Border.all(
+          color: SceptronicPalette.primary.withValues(alpha: 0.42),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.science_outlined,
+            size: 20,
+            color: SceptronicPalette.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'DEMO MODE',
+                  style: sceptronicDisplayStyle(
+                    context,
+                    size: 13,
+                    color: SceptronicPalette.primary,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Virtual Stock A/B are active. No Bluetooth commands are sent.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white70,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class SceptronicBrandLockup extends StatelessWidget {
   const SceptronicBrandLockup({
     super.key,
@@ -306,15 +359,20 @@ class SceptronicStatusPill extends StatelessWidget {
     super.key,
     required this.label,
     required this.color,
+    this.compact = false,
   });
 
   final String label;
   final Color color;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 12,
+        vertical: compact ? 5 : 7,
+      ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
         color: color.withValues(alpha: 0.16),
@@ -325,7 +383,8 @@ class SceptronicStatusPill extends StatelessWidget {
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: color,
               fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
+              letterSpacing: compact ? 0.35 : 0.6,
+              fontSize: compact ? 11 : null,
             ),
       ),
     );

@@ -52,7 +52,7 @@ class ScanScreen extends ConsumerWidget {
                   return ListTile(
                     title: Text(d.name ?? 'Unknown'),
                     subtitle: Text(
-                      d.rssi != null ? 'RSSI: ${d.rssi}' : 'RSSI: --',
+                      '${d.id}${d.rssi != null ? '  RSSI: ${d.rssi}' : ''}',
                     ),
                     onTap: () => _openDetail(context, d.id, d.name),
                   );

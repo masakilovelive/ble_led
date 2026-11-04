@@ -38,14 +38,23 @@ class _AppRootState extends ConsumerState<AppRoot> {
   }
 
   Future<void> _finishLaunch() async {
-    await ref.read(stockProvider.notifier).ensureLoaded();
+    final controller = ref.read(stockProvider.notifier);
+    await controller.ensureLoaded();
     if (!mounted) {
       return;
     }
-    final nextStage = ref.read(stockProvider).registered
-        ? AppStage.stockSelect
-        : AppStage.bluetoothSetup;
+    if (sceptronicScreenshotMode) {
+      ref.read(demoModeProvider.notifier).state = true;
+      setState(() => _stage = AppStage.stockSelect);
+      return;
+    }
+    final stockState = ref.read(stockProvider);
+    final nextStage =
+        stockState.registered ? AppStage.stockSelect : AppStage.bluetoothSetup;
     setState(() => _stage = nextStage);
+    if (stockState.registered && stockState.autoReconnect) {
+      unawaited(controller.autoConnectStored());
+    }
   }
 
   void _handleStartupSetupComplete() {

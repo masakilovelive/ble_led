@@ -6,11 +6,9 @@ import '../app/product_ui_state.dart';
 import '../ble/led_ui_state.dart';
 import '../ble/models.dart';
 import '../ble/stock_controller.dart';
-import '../env.dart';
 import 'bluetooth_setting_screen.dart';
 import 'led_setting_screen.dart';
 import 'sceptronic_ui.dart';
-import 'setup_screen.dart';
 
 class StockSelectScreen extends ConsumerStatefulWidget {
   const StockSelectScreen({super.key});
@@ -40,6 +38,31 @@ class _StockSelectScreenState extends ConsumerState<StockSelectScreen>
       if (!mounted) {
         return;
       }
+      if (sceptronicScreenshotMode) {
+        final ledUi = ref.read(ledUiProvider.notifier);
+        ledUi.setBatteryVoltage(StockSide.a, 2.05, 0.82);
+        ledUi.setBatteryVoltage(StockSide.b, 2.01, 0.75);
+        ledUi.setSegmentMode(
+          StockSide.a,
+          ColorZone.both,
+          LedMode.rainbow,
+          persist: false,
+        );
+        ledUi.setSegmentColor(
+          StockSide.b,
+          ColorZone.both,
+          const Color(0xFF22C7F0),
+          persist: false,
+        );
+        ledUi.setSegmentMode(
+          StockSide.b,
+          ColorZone.both,
+          LedMode.color,
+          persist: false,
+        );
+        ledUi.setOutputEnabled(StockSide.a, true, persist: false);
+        ledUi.setOutputEnabled(StockSide.b, true, persist: false);
+      }
       setState(() => _ready = true);
     });
   }
@@ -55,6 +78,7 @@ class _StockSelectScreenState extends ConsumerState<StockSelectScreen>
     final stockState = ref.watch(stockProvider);
     final ledUiState = ref.watch(ledUiProvider);
     final syncro = ref.watch(bothSyncroProvider);
+    final demoMode = ref.watch(demoModeProvider);
 
     return Scaffold(
       backgroundColor: SceptronicPalette.background,
@@ -64,18 +88,6 @@ class _StockSelectScreenState extends ConsumerState<StockSelectScreen>
         titleSpacing: 18,
         title: const SceptronicBrandLockup(compact: true),
         actions: [
-          if (kEnableDebugBridgeUi)
-            IconButton(
-              tooltip: 'MCU Bridge',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const SetupScreen(),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.settings_input_component_rounded),
-            ),
           IconButton(
             tooltip: 'Bluetooth Setting',
             onPressed: () {
@@ -104,6 +116,10 @@ class _StockSelectScreenState extends ConsumerState<StockSelectScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (demoMode && !sceptronicScreenshotMode) ...[
+                          const SceptronicDemoBanner(),
+                          const SizedBox(height: 14),
+                        ],
                         _buildTopBar(
                           context,
                           syncro: syncro,
@@ -128,6 +144,7 @@ class _StockSelectScreenState extends ConsumerState<StockSelectScreen>
                                   stockState: stockState,
                                   ledUiState: ledUiState,
                                   compact: false,
+                                  demoMode: demoMode,
                                 ),
                               ),
                               const SizedBox(width: 18),
@@ -138,6 +155,7 @@ class _StockSelectScreenState extends ConsumerState<StockSelectScreen>
                                   stockState: stockState,
                                   ledUiState: ledUiState,
                                   compact: false,
+                                  demoMode: demoMode,
                                 ),
                               ),
                             ],
@@ -153,6 +171,7 @@ class _StockSelectScreenState extends ConsumerState<StockSelectScreen>
                                   stockState: stockState,
                                   ledUiState: ledUiState,
                                   compact: compactStocks,
+                                  demoMode: demoMode,
                                 ),
                               ),
                               SizedBox(width: compactStocks ? 10 : 18),
@@ -163,6 +182,7 @@ class _StockSelectScreenState extends ConsumerState<StockSelectScreen>
                                   stockState: stockState,
                                   ledUiState: ledUiState,
                                   compact: compactStocks,
+                                  demoMode: demoMode,
                                 ),
                               ),
                             ],
@@ -262,18 +282,37 @@ class _StockSelectScreenState extends ConsumerState<StockSelectScreen>
     required StockState stockState,
     required LedUiState ledUiState,
     required bool compact,
+    required bool demoMode,
   }) {
     final sideState = side == StockSide.a ? stockState.a : stockState.b;
     final sideUi = ledUiState.sideState(side);
+    final liveScreenshot = demoMode && sceptronicScreenshotMode;
     final batteryPercent =
         (sideUi.batteryPercent.clamp(0.0, 1.0) * 100).round();
-    final batteryDetail = sideUi.batteryVoltage == null
-        ? 'Battery data waits for BLE connect.'
-        : sideUi.charging
-            ? 'Charging'
-            : 'Battery tracking active';
-    final connectionColor = _connectionColor(sideState.status);
-    final connectionLabel = _connectionLabel(sideState.status);
+    final batteryDetail = liveScreenshot
+        ? 'Battery tracking active'
+        : demoMode
+            ? 'Virtual battery telemetry'
+            : sideUi.batteryVoltage == null
+                ? 'Battery data waits for BLE connect.'
+                : sideUi.charging
+                    ? 'Charging'
+                    : 'Battery tracking active';
+    final connectionColor = liveScreenshot
+        ? SceptronicPalette.success
+        : demoMode
+            ? SceptronicPalette.success
+            : _connectionColor(sideState.status);
+    final connectionLabel = liveScreenshot
+        ? 'CONNECTED'
+        : demoMode
+            ? 'DEMO READY'
+            : _connectionLabel(sideState.status);
+    final deviceLabel = liveScreenshot
+        ? (side == StockSide.a ? 'stockA' : 'stockB')
+        : demoMode
+            ? (side == StockSide.a ? 'Virtual Stock A' : 'Virtual Stock B')
+            : sideState.device?.name ?? 'No device assigned';
 
     return SceptronicPanel(
       padding: EdgeInsets.all(compact ? 14 : 20),
@@ -295,7 +334,7 @@ class _StockSelectScreenState extends ConsumerState<StockSelectScreen>
                     SceptronicMetricTile(
                       label: 'Connection',
                       value: connectionLabel,
-                      detail: sideState.device?.name ?? 'No device assigned',
+                      detail: deviceLabel,
                       icon: Icons.bluetooth_connected_rounded,
                       accent: connectionColor,
                       compact: true,
@@ -319,7 +358,7 @@ class _StockSelectScreenState extends ConsumerState<StockSelectScreen>
                       child: SceptronicMetricTile(
                         label: 'Connection',
                         value: connectionLabel,
-                        detail: sideState.device?.name ?? 'No device assigned',
+                        detail: deviceLabel,
                         icon: Icons.bluetooth_connected_rounded,
                         accent: connectionColor,
                       ),

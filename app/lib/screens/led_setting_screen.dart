@@ -61,6 +61,7 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
     final stockState = ref.watch(stockProvider);
     final ledUiState = ref.watch(ledUiProvider);
     final syncro = ref.watch(bothSyncroProvider);
+    final demoMode = ref.watch(demoModeProvider);
     final primarySide = syncro
         ? ledUiState.sideState(StockSide.a)
         : ledUiState.sideState(widget.side);
@@ -103,20 +104,6 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'BOTH SYNCRO',
-            onPressed: () {
-              ref.read(bothSyncroProvider.notifier).state = !syncro;
-              _loadPickerFromUi(ref.read(ledUiProvider));
-            },
-            icon: Icon(
-              syncro ? Icons.link_rounded : Icons.link_off_rounded,
-              color:
-                  syncro ? SceptronicPalette.primary : SceptronicPalette.muted,
-            ),
-          ),
-        ],
       ),
       body: SceptronicBackdrop(
         child: SafeArea(
@@ -126,6 +113,10 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (demoMode && !sceptronicScreenshotMode) ...[
+                  const SceptronicDemoBanner(),
+                  SizedBox(height: denseLayout ? 10 : 14),
+                ],
                 if (!_ready)
                   const Center(
                     child: Padding(
@@ -167,7 +158,7 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
                             ),
                           ],
                         ),
-                if (stockState.message != null) ...[
+                if (!demoMode && stockState.message != null) ...[
                   const SizedBox(height: 18),
                   SceptronicPanel(
                     child: Text(
@@ -338,17 +329,26 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
         children: [
           Row(
             children: [
-              Text(
-                title,
-                style: sceptronicDisplayStyle(
-                  context,
-                  size: dense ? 15 : (compact ? 17 : 20),
+              Expanded(
+                child: FittedBox(
+                  alignment: Alignment.centerLeft,
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: sceptronicDisplayStyle(
+                      context,
+                      size: dense ? 14 : (compact ? 16 : 20),
+                    ),
+                  ),
                 ),
               ),
-              const Spacer(),
+              SizedBox(width: dense ? 6 : 8),
               SceptronicStatusPill(
                 label: _modeLabel(segment.mode),
                 color: _modeColor(segment.mode),
+                compact: compact || dense,
               ),
             ],
           ),
@@ -498,8 +498,11 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
   }
 
   Future<void> _applySolidColor(ColorZone zone) async {
+    final demoMode = ref.read(demoModeProvider);
     var stockState = ref.read(stockProvider);
-    stockState = await _ensureTargetConnections(stockState);
+    if (!demoMode) {
+      stockState = await _ensureTargetConnections(stockState);
+    }
     final led = ref.read(ledControllerProvider);
     final ui = ref.read(ledUiProvider);
     final uiNotifier = ref.read(ledUiProvider.notifier);
@@ -508,7 +511,7 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
 
     for (final side in _targetSides()) {
       final deviceId = _deviceId(stockState, side);
-      if (deviceId == null) {
+      if (deviceId == null && !demoMode) {
         continue;
       }
 
@@ -534,6 +537,11 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
       uiNotifier.setSegmentMode(side, ColorZone.bottom, nextTipMode);
       uiNotifier.setSegmentColor(side, zone, color);
 
+      if (demoMode) {
+        continue;
+      }
+      final liveDeviceId = deviceId!;
+
       final sideState = side == StockSide.a ? stockState.a : stockState.b;
       if (sideState.status != DeviceConnectionState.connected) {
         continue;
@@ -541,22 +549,22 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
 
       await heartbeat.stop(
         side,
-        deviceId: deviceId,
+        deviceId: liveDeviceId,
         sendOff: false,
         resetMode: false,
       );
       try {
-        await led.stopRainbow(deviceId);
+        await led.stopRainbow(liveDeviceId);
       } catch (_) {}
-      await led.setOutputEnabled(deviceId, true);
-      await led.setBrightness(deviceId, _brightness.round());
+      await led.setOutputEnabled(liveDeviceId, true);
+      await led.setBrightness(liveDeviceId, _brightness.round());
       await led.setTopColor(
-        deviceId: deviceId,
+        deviceId: liveDeviceId,
         side: side,
         color: nextHeadMode == LedMode.off ? Colors.black : nextHeadColor,
       );
       await led.setBottomColor(
-        deviceId: deviceId,
+        deviceId: liveDeviceId,
         side: side,
         color: nextTipMode == LedMode.off ? Colors.black : nextTipColor,
       );
@@ -564,8 +572,11 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
   }
 
   Future<void> _startHeartbeat(int intervalMs) async {
+    final demoMode = ref.read(demoModeProvider);
     var stockState = ref.read(stockProvider);
-    stockState = await _ensureTargetConnections(stockState);
+    if (!demoMode) {
+      stockState = await _ensureTargetConnections(stockState);
+    }
     final led = ref.read(ledControllerProvider);
     final uiNotifier = ref.read(ledUiProvider.notifier);
     final heartbeat = ref.read(heartbeatControllerProvider);
@@ -575,20 +586,25 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
       stockSnapshot: stockState,
     )) {
       final deviceId = _deviceId(stockState, side);
-      if (deviceId == null) {
+      if (deviceId == null && !demoMode) {
         continue;
       }
-      try {
-        await led.stopRainbow(deviceId);
-      } catch (_) {}
-      await led.setOutputEnabled(deviceId, true);
-      await led.setBrightness(deviceId, _brightness.round());
       uiNotifier.setOutputEnabled(side, true);
       uiNotifier.setBrightness(side, _brightness);
       uiNotifier.setHeartbeatInterval(side, intervalMs);
+      if (demoMode) {
+        uiNotifier.setSegmentMode(side, ColorZone.both, LedMode.heartbeat);
+        continue;
+      }
+      final liveDeviceId = deviceId!;
+      try {
+        await led.stopRainbow(liveDeviceId);
+      } catch (_) {}
+      await led.setOutputEnabled(liveDeviceId, true);
+      await led.setBrightness(liveDeviceId, _brightness.round());
       await heartbeat.start(
         side,
-        deviceId,
+        liveDeviceId,
         interval: Duration(milliseconds: intervalMs),
       );
     }
@@ -603,6 +619,13 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
   }
 
   Future<void> _stopHeartbeat() async {
+    if (ref.read(demoModeProvider)) {
+      final uiNotifier = ref.read(ledUiProvider.notifier);
+      for (final side in _targetSides()) {
+        uiNotifier.setSegmentMode(side, ColorZone.both, LedMode.off);
+      }
+      return;
+    }
     final stockState = ref.read(stockProvider);
     final heartbeat = ref.read(heartbeatControllerProvider);
     for (final side in _targetSides()) {
@@ -616,8 +639,11 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
   }
 
   Future<void> _startRainbow() async {
+    final demoMode = ref.read(demoModeProvider);
     var stockState = ref.read(stockProvider);
-    stockState = await _ensureTargetConnections(stockState);
+    if (!demoMode) {
+      stockState = await _ensureTargetConnections(stockState);
+    }
     final led = ref.read(ledControllerProvider);
     final uiNotifier = ref.read(ledUiProvider.notifier);
     final heartbeat = ref.read(heartbeatControllerProvider);
@@ -626,26 +652,40 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
       stockSnapshot: stockState,
     )) {
       final deviceId = _deviceId(stockState, side);
-      if (deviceId == null) {
+      if (deviceId == null && !demoMode) {
         continue;
       }
-      await heartbeat.stop(
-        side,
-        deviceId: deviceId,
-        sendOff: false,
-        resetMode: false,
-      );
-      await led.setOutputEnabled(deviceId, true);
-      await led.setBrightness(deviceId, _brightness.round());
-      await led.startRainbow(deviceId, intervalMs: _defaultRainbowIntervalMs);
       uiNotifier.setOutputEnabled(side, true);
       uiNotifier.setBrightness(side, _brightness);
       uiNotifier.setRainbowInterval(side, _defaultRainbowIntervalMs);
       uiNotifier.setSegmentMode(side, ColorZone.both, LedMode.rainbow);
+      if (demoMode) {
+        continue;
+      }
+      final liveDeviceId = deviceId!;
+      await heartbeat.stop(
+        side,
+        deviceId: liveDeviceId,
+        sendOff: false,
+        resetMode: false,
+      );
+      await led.setOutputEnabled(liveDeviceId, true);
+      await led.setBrightness(liveDeviceId, _brightness.round());
+      await led.startRainbow(
+        liveDeviceId,
+        intervalMs: _defaultRainbowIntervalMs,
+      );
     }
   }
 
   Future<void> _stopRainbow() async {
+    if (ref.read(demoModeProvider)) {
+      final uiNotifier = ref.read(ledUiProvider.notifier);
+      for (final side in _targetSides()) {
+        uiNotifier.setSegmentMode(side, ColorZone.both, LedMode.off);
+      }
+      return;
+    }
     final stockState = ref.read(stockProvider);
     final led = ref.read(ledControllerProvider);
     final uiNotifier = ref.read(ledUiProvider.notifier);
@@ -673,6 +713,9 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
   }
 
   Future<StockState> _ensureTargetConnections(StockState state) async {
+    if (ref.read(demoModeProvider)) {
+      return state;
+    }
     final targets = _targetSides(stockSnapshot: state);
     if (targets.isEmpty) {
       return state;
@@ -767,6 +810,9 @@ class _LedSettingScreenState extends ConsumerState<LedSettingScreen> {
     final sides = syncro
         ? <StockSide>[StockSide.a, StockSide.b]
         : <StockSide>[widget.side];
+    if (ref.read(demoModeProvider)) {
+      return sides;
+    }
     if (!connectedOnly) {
       return sides
           .where((side) => _deviceId(stockState, side) != null)

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart' hide Logger;
 import 'package:logger/logger.dart' as app_logger;
 
+import '../env.dart';
 import 'ble_permissions.dart';
 import 'ble_client.dart';
 import 'models.dart';
@@ -40,9 +41,7 @@ class ScanController extends StateNotifier<AsyncValue<List<BleDevice>>> {
       return;
     }
     final map = <String, BleDevice>{};
-    // Setup scan must not depend on the platform reporting the local name
-    // in the first advertisement packet. Filter in the UI instead.
-    _sub = _client.scan().listen(
+    _sub = _client.scan(nameHints: Env.deviceNameHints).listen(
       (d) {
         if (session != _session) {
           return;

@@ -135,25 +135,12 @@ class StockController extends StateNotifier<StockState> {
   final Map<StockSide, DateTime> _lastConnectAttempt = {};
   final Map<StockSide, DateTime> _connectBackoffUntil = {};
   Future<void> _connectQueue = Future.value();
+  bool _reconnectDiscoveryInProgress = false;
 
   static const Duration _connectCooldown = Duration(seconds: 2);
   static const Duration _connectGap = Duration(milliseconds: 600);
   static const Duration _postConnectDelay = Duration(milliseconds: 800);
   static const Duration _reconnectDelay = Duration(seconds: 2);
-  // C6 stock firmware reports ADC-side voltage (after divider). Convert to
-  // battery-side voltage for percentage estimation.
-  static const double _batteryDividerRatio = 2.0;
-  // Requested battery estimation rule anchors (VBAT -> %).
-  static const double _ruleV25 = 3.36;
-  static const double _ruleV50 = 3.57;
-  static const double _ruleV75 = 3.65;
-  static const double _ruleP25 = 0.25;
-  static const double _ruleP50 = 0.50;
-  static const double _ruleP75 = 0.75;
-  static const double _ruleSlopeLow =
-      (_ruleP50 - _ruleP25) / (_ruleV50 - _ruleV25);
-  static const double _ruleSlopeHigh =
-      (_ruleP75 - _ruleP50) / (_ruleV75 - _ruleV50);
   static const Duration _startupSequenceStep = Duration(milliseconds: 200);
   static const List<Color> _startupSequenceColors = <Color>[
     Color(0xFFFF0000),
@@ -179,13 +166,28 @@ class StockController extends StateNotifier<StockState> {
   }
 
   Future<bool> autoConnectStored({
-    Duration timeout = const Duration(seconds: 10),
+    Duration timeout = const Duration(seconds: 25),
   }) async {
     await ensureLoaded();
     if (!_isActive) {
       return false;
     }
-    if (!state.registered) {
+    if (!state.registered || !state.autoReconnect) {
+      return false;
+    }
+    final granted = await _ensurePermissions();
+    if (!_isActive || !granted) {
+      return false;
+    }
+    final registeredIds = <String>{
+      state.a.device!.id,
+      state.b.device!.id,
+    };
+    // Perform one shared discovery pass before starting either connection.
+    // On iOS this registers both saved peripheral UUIDs with CoreBluetooth and
+    // avoids competing per-device scans during application startup.
+    await _client.discoverDeviceIds(registeredIds);
+    if (!_isActive) {
       return false;
     }
     await connectBoth();
@@ -195,12 +197,6 @@ class StockController extends StateNotifier<StockState> {
     final connected = await _waitForConnections(timeout);
     if (!_isActive) {
       return false;
-    }
-    if (!connected) {
-      await disconnectBoth();
-      _setMessage(
-        'Offline mode: ScepTRONIC UI remains available without connection.',
-      );
     }
     return connected;
   }
@@ -320,7 +316,11 @@ class StockController extends StateNotifier<StockState> {
         ),
       );
 
-      final subscription = _client.connect(device.id).listen(
+      // A saved iOS peripheral UUID may not be present in CoreBluetooth's
+      // current discovery cache after an app/MCU restart. Pre-scan for the
+      // registered device before connecting so both saved stocks reconnect
+      // consistently instead of only whichever one iOS already knows.
+      final subscription = _client.connectAfterDiscovery(device.id).listen(
         (update) {
           if (!_isActive) {
             return;
@@ -750,9 +750,60 @@ class StockController extends StateNotifier<StockState> {
         return;
       }
       if (_sideState(side).status == DeviceConnectionState.disconnected) {
-        unawaited(connect(side));
+        unawaited(_reconnectDisconnectedDevices());
       }
     });
+  }
+
+  Future<void> _reconnectDisconnectedDevices() async {
+    if (!_isActive || _reconnectDiscoveryInProgress || !state.autoReconnect) {
+      return;
+    }
+
+    final sides = StockSide.values.where((side) {
+      final sideState = _sideState(side);
+      return sideState.device != null &&
+          sideState.status == DeviceConnectionState.disconnected &&
+          _manualDisconnect[side] != true;
+    }).toList(growable: false);
+    if (sides.isEmpty) {
+      return;
+    }
+
+    _reconnectDiscoveryInProgress = true;
+    for (final side in sides) {
+      _reconnectTimers.remove(side)?.cancel();
+    }
+
+    try {
+      final granted = await _ensurePermissions();
+      if (!_isActive || !granted || !state.autoReconnect) {
+        return;
+      }
+      final found = await _client.discoverDeviceIds(
+        sides.map((side) => _sideState(side).device!.id),
+      );
+      if (!_isActive || !state.autoReconnect) {
+        return;
+      }
+
+      for (final side in sides) {
+        final sideState = _sideState(side);
+        final device = sideState.device;
+        if (device == null ||
+            sideState.status != DeviceConnectionState.disconnected ||
+            _manualDisconnect[side] == true) {
+          continue;
+        }
+        if (found.contains(device.id)) {
+          await connect(side);
+        } else {
+          _scheduleReconnect(side);
+        }
+      }
+    } finally {
+      _reconnectDiscoveryInProgress = false;
+    }
   }
 
   Future<void> _runConnectSerial(Future<void> Function() task) {
@@ -919,14 +970,8 @@ class StockController extends StateNotifier<StockState> {
     if (voltage <= 0) {
       return 0;
     }
-    // Old payloads may already carry battery-side voltage (about 3.x V),
-    // while current C6 payloads carry ADC-side voltage (about 1.x V).
-    final batteryVoltage =
-        voltage < 2.6 ? voltage * _batteryDividerRatio : voltage;
-    final percent = batteryVoltage <= _ruleV50
-        ? _ruleP25 + (batteryVoltage - _ruleV25) * _ruleSlopeLow
-        : _ruleP50 + (batteryVoltage - _ruleV50) * _ruleSlopeHigh;
-    return percent.clamp(0.0, 1.0);
+    final clamped = voltage.clamp(Env.batteryMinV, Env.batteryMaxV);
+    return (clamped - Env.batteryMinV) / (Env.batteryMaxV - Env.batteryMinV);
   }
 
   Future<void> _loadStored() async {

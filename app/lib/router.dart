@@ -1,3 +1,4 @@
+
 import 'package:go_router/go_router.dart';
 import 'screens/scan_screen.dart';
 import 'screens/device_detail_screen.dart';

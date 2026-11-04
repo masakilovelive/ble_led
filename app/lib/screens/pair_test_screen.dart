@@ -181,6 +181,8 @@ class PairTestScreen extends ConsumerWidget {
             const SizedBox(height: 4),
             Text(device?.name ?? 'Not assigned'),
             if (device != null) ...[
+              Text(device.id, style: theme.textTheme.bodySmall),
+              const SizedBox(height: 2),
               Text(
                 'N: ${sideState.pairNumber ?? '?'}  Role: ${sideState.role ?? '?'}',
                 style: theme.textTheme.bodySmall,
@@ -274,8 +276,7 @@ class PairTestScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'N:${info.pairNumber ?? '?'}  Role:${info.role ?? '?'}'
-                '${d.rssi != null ? '  RSSI:${d.rssi}' : ''}',
+                '${d.id}  N:${info.pairNumber ?? '?'}  Role:${info.role ?? '?'}',
               ),
               const SizedBox(height: 10),
               Wrap(

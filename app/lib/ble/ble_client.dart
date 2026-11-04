@@ -10,17 +10,71 @@ class BleClient {
 
   BleClient(this._ble);
 
-  Stream<DiscoveredDevice> scan({String? nameHint}) {
+  Stream<DiscoveredDevice> scan({Iterable<String> nameHints = const []}) {
     return _ble.scanForDevices(withServices: []).where((d) {
-      if (nameHint == null || nameHint.isEmpty) return true;
-      return d.name.isNotEmpty && d.name.contains(nameHint);
+      return matchesDeviceName(d.name, nameHints);
     });
+  }
+
+  Future<Set<String>> discoverDeviceIds(
+    Iterable<String> deviceIds, {
+    Duration timeout = const Duration(seconds: 6),
+  }) async {
+    final targets = deviceIds.toSet();
+    final found = <String>{};
+    if (targets.isEmpty) {
+      return found;
+    }
+
+    final allFound = Completer<void>();
+    final subscription = scan().listen(
+      (device) {
+        if (targets.contains(device.id)) {
+          found.add(device.id);
+          if (found.length == targets.length && !allFound.isCompleted) {
+            allFound.complete();
+          }
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!allFound.isCompleted) {
+          allFound.complete();
+        }
+      },
+    );
+
+    try {
+      await Future.any<void>([
+        allFound.future,
+        Future<void>.delayed(timeout),
+      ]);
+    } finally {
+      await subscription.cancel();
+    }
+    return found;
+  }
+
+  static bool matchesDeviceName(String name, Iterable<String> nameHints) {
+    if (nameHints.isEmpty) return true;
+    if (name.isEmpty) return false;
+    final normalizedName = name.toLowerCase();
+    return nameHints.any(
+      (hint) => hint.isNotEmpty && normalizedName.contains(hint.toLowerCase()),
+    );
   }
 
   Stream<ConnectionStateUpdate> connect(String deviceId) {
     return _ble.connectToDevice(
-        id: _normalizeDeviceId(deviceId),
-        connectionTimeout: const Duration(seconds: 15));
+        id: deviceId, connectionTimeout: const Duration(seconds: 15));
+  }
+
+  Stream<ConnectionStateUpdate> connectAfterDiscovery(String deviceId) {
+    return _ble.connectToAdvertisingDevice(
+      id: deviceId,
+      withServices: const [],
+      prescanDuration: const Duration(seconds: 5),
+      connectionTimeout: const Duration(seconds: 15),
+    );
   }
 
   Future<List<int>> readCharacteristic({
@@ -29,7 +83,7 @@ class BleClient {
     required String charUuid,
   }) async {
     final ch = QualifiedCharacteristic(
-      deviceId: _normalizeDeviceId(deviceId),
+      deviceId: deviceId,
       serviceId: Uuid.parse(serviceUuid),
       characteristicId: Uuid.parse(charUuid),
     );
@@ -38,7 +92,7 @@ class BleClient {
 
   Future<List<DiscoveredService>> discoverServices(String deviceId) async {
     // ignore: deprecated_member_use
-    return _ble.discoverServices(_normalizeDeviceId(deviceId));
+    return _ble.discoverServices(deviceId);
   }
 
   Future<void> writeByte({
@@ -63,7 +117,7 @@ class BleClient {
     bool withResponse = true,
   }) async {
     final ch = QualifiedCharacteristic(
-      deviceId: _normalizeDeviceId(deviceId),
+      deviceId: deviceId,
       serviceId: Uuid.parse(serviceUuid),
       characteristicId: Uuid.parse(charUuid),
     );
@@ -82,15 +136,11 @@ class BleClient {
     required String charUuid,
   }) {
     final ch = QualifiedCharacteristic(
-      deviceId: _normalizeDeviceId(deviceId),
+      deviceId: deviceId,
       serviceId: Uuid.parse(serviceUuid),
       characteristicId: Uuid.parse(charUuid),
     );
     return _ble.subscribeToCharacteristic(ch);
-  }
-
-  String _normalizeDeviceId(String deviceId) {
-    return deviceId.trim().toUpperCase();
   }
 }
 
