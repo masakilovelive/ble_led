@@ -40,4 +40,4 @@ flutter build apk --debug \
 
 ## Consoleへの反映状況
 
-画像の作成とGitHubへの保存まで完了。Google Play Consoleへの登録・保存・審査送信は今回実施していない。iOSのスクリーンショット登録状況とは分けて管理する。
+2026-11-05〜06（JST）更新: Google Play Consoleのスマートフォン用スクリーンショットを上記3枚へ差し替え、未公開として保存したことを確認済み。正式審査送信・テスターへの配信は未実施。iOS用画像とは別に管理する。最新の残作業は[ストア再提出作業の進捗](../../docs/BUILD_15_STORE_RELEASE_WORK.md)を参照。
