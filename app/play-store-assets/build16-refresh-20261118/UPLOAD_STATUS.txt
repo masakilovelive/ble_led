@@ -1,0 +1,23 @@
+Build 16 screenshot upload record
+記録日: 2026-11-18 / America/Los_Angeles
+
+GitHub:
+- 保存先: masakilovelive/ble_led / main / app/play-store-assets/build16-refresh-20261118/
+- この追加コミットに4画面×10サイズ=40 PNG、4種類のZIP、寸法・SHA-256一覧、
+  縮小プレビュー、README、撮影用ツールを含める。
+- 旧画像・製品Dartソース・ファームウェア・提出済みIPA/AABは変更しない。
+- ローカルの作業中ブランチ・ステージ済み変更は含めない。
+
+App Store Connect:
+- 対象アプリ: ScepTRONIC（app ID 6745640058）
+- ユーザー依頼は直前の画像作成作業の続きとしてiPhone画像の登録と解釈。
+  新しいIPA/ビルド番号の作成・アップロードはこの画像登録とは別。
+- 既存ChromeのApp Store Connectタブを確認したが、/login画面だった。
+- 本人のログイン・必要な2段階認証待ち。画像登録・保存は未実施。
+- iPhoneサイズ画像はステータスバーなしのUI描画画像。実機写真ではない。
+  公開前にBuild 16の実画面との一致を確認する。
+- iPadは現行iPhone専用設定のため参考用であり、iPad枠へは登録しない。
+- 起動画面は参考用。操作画面01〜03の登録を中心にし、正式な審査送信は行わない。
+- Google Play Consoleへの画像登録も今回未実施。
+
+ここにテスターのメールアドレス・認証情報は含めていない。

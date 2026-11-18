@@ -1,0 +1,8 @@
+{
+  "dual_color_a_id": "capture-a",
+  "dual_color_a_name": "Noxel-1",
+  "dual_color_b_id": "capture-b",
+  "dual_color_b_name": "Noxel-2",
+  "dual_color_auto_reconnect": true,
+  "led_ui_state_v1": "{\"a\":{\"top\":{\"mode\":\"rainbow\",\"color_argb\":4294095075},\"bottom\":{\"mode\":\"rainbow\",\"color_argb\":4294095075},\"heartbeat_interval_ms\":600,\"rainbow_interval_ms\":40,\"brightness\":242,\"output_enabled\":true},\"b\":{\"top\":{\"mode\":\"color\",\"color_argb\":4280469488},\"bottom\":{\"mode\":\"color\",\"color_argb\":4280469488},\"brightness\":242,\"output_enabled\":true}}"
+}
